@@ -1,20 +1,66 @@
 # NeoTrellis M4 Step Sequencer
 
-A C++ implementation of a step sequencer for the AdaFruit NeoTrellis M4 platform.
+A **multi-platform C++ implementation** of a step sequencer with hardware abstraction for true portability. Features both embedded ARM target (NeoTrellis M4) and host simulation environment.
 
 ## Features
 
-- 4-track, 16-step sequencer
-- Adjustable tempo (BPM)
+### Core Sequencer Engine
+- 4-track, 8-step sequencer (configurable)
+- Adjustable tempo (120 BPM default)
 - Visual feedback with RGB LEDs
 - Real-time pattern editing
-- Per-track volume and mute controls
+- Dependency injection architecture for testability
+
+### Multi-Platform Support
+- **Embedded Target**: AdaFruit NeoTrellis M4 (SAMD51J19A ARM Cortex-M4F)
+- **Simulation Environment**: Cross-platform terminal interface with colored display
+- **Shared Business Logic**: Platform-agnostic core with hardware abstraction
+
+### Development Tools
+- Comprehensive unit test suite with 81%+ code coverage
+- Host-based simulation for development without hardware
+- Automated build system with multiple targets
+
+## Architecture
+
+### Platform Abstraction
+Following project guidelines, **all build-time and runtime environments are abstracted** from the core logic:
+
+```cpp
+// Core interfaces (platform-agnostic)
+class IDisplay    // LED/display abstraction
+class IInput      // Button/input abstraction  
+class IClock      // Timing abstraction
+
+// Platform implementations
+CursesDisplay     // Terminal-based simulation
+NeoTrellisDisplay // Hardware RGB LEDs
+
+CursesInput       // Keyboard simulation
+NeoTrellisInput   // Hardware button matrix
+```
+
+### Directory Structure
+```
+├── include/
+│   ├── core/           # Platform-agnostic interfaces
+│   ├── simulation/     # Host simulation implementations
+│   └── embedded/       # Hardware implementations
+├── src/
+│   ├── core/           # Business logic (StepSequencer)
+│   ├── simulation/     # Curses-based simulation
+│   └── embedded/       # NeoTrellis M4 hardware code
+├── test/               # Unit tests with mocks
+└── build-*/            # Platform-specific build outputs
+```
 
 ## Hardware Requirements
 
-- AdaFruit NeoTrellis M4 (SAMD51-based)
-- ARM GCC toolchain (arm-none-eabi-gcc)
-- BOSSAC for flashing
+- **Target**: AdaFruit NeoTrellis M4 (SAMD51J19A, 120MHz ARM Cortex-M4F)
+- **Memory**: 512KB Flash, 192KB RAM
+- **Interface**: 4×8 capacitive touch grid with RGB LEDs
+- **Toolchain**: ARM GCC cross-compiler (arm-none-eabi-gcc)
+- **Flash Tool**: BOSSA bootloader
 
 ## Building
 

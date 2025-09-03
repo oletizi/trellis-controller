@@ -17,7 +17,8 @@ if(NOT CMAKE_CROSSCOMPILING)
 endif()
 
 # MCU specific flags are now set in the toolchain file
-# Additional project-specific flags can be added here
+# Additional project-specific flags for embedded
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti -fno-use-cxa-atexit")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -T${CMAKE_SOURCE_DIR}/samd51.ld")
 
 # Define SAMD51 specific settings
@@ -28,17 +29,36 @@ add_definitions(
     -DARDUINO_ARCH_SAMD
 )
 
-# Include directories (include our custom headers first)
+# Include directories (include core and embedded headers first)
 include_directories(
+    ${CMAKE_SOURCE_DIR}/include/core
+    ${CMAKE_SOURCE_DIR}/include/embedded
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/lib
 )
 
-# Source files
-file(GLOB_RECURSE SOURCES 
+# Core business logic sources (platform-agnostic)
+set(CORE_SOURCES
+    ${CMAKE_SOURCE_DIR}/src/core/StepSequencer.cpp
+)
+
+# Embedded platform sources
+set(EMBEDDED_SOURCES
+    ${CMAKE_SOURCE_DIR}/src/embedded/main.cpp
+    ${CMAKE_SOURCE_DIR}/src/embedded/NeoTrellisDisplay.cpp
+    ${CMAKE_SOURCE_DIR}/src/embedded/NeoTrellisInput.cpp
+)
+
+# Legacy embedded sources (keep existing hardware drivers)
+file(GLOB LEGACY_SOURCES 
     ${CMAKE_SOURCE_DIR}/src/*.cpp
     ${CMAKE_SOURCE_DIR}/src/*.c
 )
+# Remove old main.cpp to avoid conflicts
+list(FILTER LEGACY_SOURCES EXCLUDE REGEX ".*/main.cpp$")
+
+# All sources for embedded build
+set(SOURCES ${CORE_SOURCES} ${EMBEDDED_SOURCES} ${LEGACY_SOURCES})
 
 # Create executable
 add_executable(${PROJECT_NAME}.elf ${SOURCES})

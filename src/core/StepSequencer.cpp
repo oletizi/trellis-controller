@@ -1,5 +1,14 @@
 #include "StepSequencer.h"
-#include <cstring>
+#ifdef __SAMD51J19A__
+    // Embedded environment - use custom string functions
+    #include "string.h"
+    extern "C" {
+        void* memset(void* dest, int val, uint32_t len);
+    }
+#else
+    // Host environment - use standard library
+    #include <cstring>
+#endif
 
 // Default clock implementation for embedded use
 class SystemClock : public IClock {
@@ -28,7 +37,7 @@ StepSequencer::StepSequencer()
     , lastStepTime_(0)
     , ownsClock_(false) {
     
-    std::memset(pattern_, 0, sizeof(pattern_));
+    memset(pattern_, 0, sizeof(pattern_));
     
     for (int i = 0; i < MAX_TRACKS; i++) {
         trackVolumes_[i] = 127;
@@ -51,7 +60,7 @@ StepSequencer::StepSequencer(Dependencies deps)
     , lastStepTime_(0)
     , ownsClock_(false) {
     
-    std::memset(pattern_, 0, sizeof(pattern_));
+    memset(pattern_, 0, sizeof(pattern_));
     
     for (int i = 0; i < MAX_TRACKS; i++) {
         trackVolumes_[i] = 127;

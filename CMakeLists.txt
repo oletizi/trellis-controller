@@ -42,18 +42,19 @@ include_directories(
 
 # Core business logic sources (platform-agnostic)
 set(CORE_SOURCES
-    ${CMAKE_SOURCE_DIR}/src/core/StepSequencer.cpp
+    # ${CMAKE_SOURCE_DIR}/src/core/StepSequencer.cpp
 )
 
 # Embedded platform sources
 set(EMBEDDED_SOURCES
-    ${CMAKE_SOURCE_DIR}/src/embedded/main.cpp
-    ${CMAKE_SOURCE_DIR}/src/embedded/NeoTrellisDisplay.cpp
-    ${CMAKE_SOURCE_DIR}/src/embedded/NeoTrellisInput.cpp
-    ${CMAKE_SOURCE_DIR}/src/embedded/SeesawI2C.cpp
-    ${CMAKE_SOURCE_DIR}/src/embedded/SAMD51_I2C.cpp
-    ${CMAKE_SOURCE_DIR}/src/embedded/DebugSerial.cpp
-    ${CMAKE_SOURCE_DIR}/src/embedded/runtime_stubs.cpp
+    ${CMAKE_SOURCE_DIR}/src/embedded/test_main.cpp
+    # ${CMAKE_SOURCE_DIR}/src/embedded/main.cpp
+    # ${CMAKE_SOURCE_DIR}/src/embedded/NeoTrellisDisplay.cpp
+    # ${CMAKE_SOURCE_DIR}/src/embedded/NeoTrellisInput.cpp
+    # ${CMAKE_SOURCE_DIR}/src/embedded/SeesawI2C.cpp
+    # ${CMAKE_SOURCE_DIR}/src/embedded/SAMD51_I2C.cpp
+    # ${CMAKE_SOURCE_DIR}/src/embedded/DebugSerial.cpp
+    # ${CMAKE_SOURCE_DIR}/src/embedded/runtime_stubs.cpp
 )
 
 # Legacy embedded sources (keep existing hardware drivers)
@@ -61,6 +62,8 @@ file(GLOB LEGACY_SOURCES
     ${CMAKE_SOURCE_DIR}/src/*.cpp
     ${CMAKE_SOURCE_DIR}/src/*.c
 )
+# Add system_init.c explicitly
+list(APPEND LEGACY_SOURCES ${CMAKE_SOURCE_DIR}/src/system_init.c)
 # Remove old main.cpp to avoid conflicts
 list(FILTER LEGACY_SOURCES EXCLUDE REGEX ".*/main.cpp$")
 

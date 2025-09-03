@@ -2,7 +2,7 @@
 
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x00004000, LENGTH = 512K - 0x4000  /* Leave space for bootloader */
+    FLASH (rx)  : ORIGIN = 0x00000000, LENGTH = 512K  /* UF2 bootloader replaces itself */
     RAM (rwx)   : ORIGIN = 0x20000000, LENGTH = 192K
 }
 

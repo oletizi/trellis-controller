@@ -14,6 +14,8 @@ extern uint32_t _ebss;
 void Reset_Handler(void);
 void Default_Handler(void);
 int main(void);
+void __libc_init_array(void);
+void SystemInit(void);
 
 /* Cortex-M4 core handlers */
 void NMI_Handler(void) __attribute__((weak, alias("Default_Handler")));
@@ -68,6 +70,9 @@ const void* vector_table[] = {
 
 /* Reset handler - entry point */
 void Reset_Handler(void) {
+    // Initialize system first
+    SystemInit();
+    
     /* Copy initialized data from flash to RAM */
     uint32_t *src = &_sidata;
     uint32_t *dst = &_sdata;
@@ -82,6 +87,9 @@ void Reset_Handler(void) {
         *dst++ = 0;
     }
     
+    /* Initialize C++ runtime (global constructors) */
+    // __libc_init_array(); // Disabled for minimal test
+    
     /* Call main */
     main();
     
@@ -93,13 +101,22 @@ void Reset_Handler(void) {
 
 /* Default handler for unused interrupts */
 void Default_Handler(void) {
+    // Try to signal we're in a fault handler by toggling a GPIO pin rapidly
+    // This will help us identify if we're stuck in an exception
+    volatile uint32_t *porta_dir = (volatile uint32_t*)0x41008000;
+    volatile uint32_t *porta_out = (volatile uint32_t*)0x41008010;
+    volatile uint32_t *porta_outtgl = (volatile uint32_t*)0x4100801C;
+    
+    // Set PA27 as output (try different pin)
+    *porta_dir |= (1 << 27);
+    
+    // Rapidly toggle to create visible pattern
+    volatile uint32_t counter = 0;
     while (1) {
-        __asm("nop");
+        *porta_outtgl = (1 << 27);  // Toggle PA27
+        for (counter = 0; counter < 100000; counter++) {
+            __asm("nop");
+        }
     }
 }
 
-/* System initialization */
-void SystemInit(void) {
-    /* Basic system initialization - customize as needed */
-    /* Set up clocks, configure flash wait states, etc. */
-}

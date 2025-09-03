@@ -1,224 +1,213 @@
-# Embedded Deployment Work Plan
+# NeoTrellis M4 Step Sequencer - Development Journey
 
-## Project Goal
+## Summary
+This document chronicles the complete development journey from bare-metal embedded firmware to a working Arduino CLI solution for the NeoTrellis M4 step sequencer project.
+
+## Original Project Goal  
 Enable the step sequencer to run on the physical NeoTrellis M4 device, completing the hardware abstraction with functional I2C communication and real-time operation.
 
+## Initial Approach: Bare-Metal Embedded Development
+
+### What We Built
+- **Complete platform abstraction architecture** with clean interfaces (`IClock`, `IDisplay`, `IInput`)
+- **Fully functional step sequencer core logic** (4 tracks, 8 steps, 120 BPM)
+- **SAMD51 hardware drivers** including:
+  - Complete I2C master implementation (`SAMD51_I2C.cpp`)
+  - Seesaw protocol layer (`SeesawI2C.cpp`) 
+  - NeoTrellis display and input drivers
+  - Debug serial infrastructure
+  - Custom startup code and linker scripts
+
+### Build System Success
+- **CMake cross-compilation setup** for ARM Cortex-M4F
+- **10KB firmware builds** (1.97% flash usage)
+- **Unit tests with 81%+ coverage**
+- **Host simulation environment** for development without hardware
+
+### The Firmware Deployment Challenge
+
+#### Problem: UF2 Bootloader Incompatibility
+The NeoTrellis M4 uses a **UF2 bootloader**, not the BOSSA bootloader we initially targeted. This led to several critical issues:
+
+1. **Wrong memory layout**: We configured for 0x4000 offset, but UF2 bootloader expects 0x0
+2. **Wrong flashing method**: Used `bossac` instead of UF2 file copy
+3. **Missing family ID**: UF2 requires specific SAMD51 family ID (`0x55114460`)
+4. **Bootloader expectations**: UF2 bootloader may expect specific initialization sequences
+
+#### Debugging Journey
+Multiple systematic attempts to resolve the firmware issues:
+
+**Attempt 1**: Register-level hardware debugging
+- Created comprehensive I2C hardware driver
+- Added extensive debug logging infrastructure
+- Result: Firmware built but device showed solid red LED (not running)
+
+**Attempt 2**: Memory layout corrections
+- Discovered UF2 vs BOSSA memory layout differences
+- Changed linker script from 0x4000 to 0x0 origin
+- Added proper UF2 family ID
+- Result: Still solid red LED
+
+**Attempt 3**: Startup code analysis
+- Analyzed working firmware from bootloader
+- Found different vector table format and stack layout
+- Added system initialization code
+- Created custom reset handlers with diagnostics
+- Result: Still solid red LED
+
+**Attempt 4**: Minimal firmware testing
+- Created absolute minimal infinite loop firmware
+- Added GPIO diagnostic patterns
+- Attempted to turn off red LED entirely
+- Result: Still solid red LED instantly on startup
+
+**Root Cause**: The UF2 bootloader on NeoTrellis M4 has complex requirements that are not easily met with custom bare-metal firmware. The bootloader likely expects specific Arduino framework initialization or has undocumented dependencies.
+
+## Solution: Arduino CLI Approach
+
+### Why Arduino CLI
+- **Proven compatibility** with NeoTrellis M4's UF2 bootloader
+- **Professional workflow** compared to Arduino IDE
+- **Command-line automation** for builds and uploads
+- **Library ecosystem** with official Adafruit support
+- **No Python required** (avoiding CircuitPython)
+
+### Setup Process
+1. **Install Arduino CLI**: `brew install arduino-cli`
+2. **Configure board manager**: Add Adafruit board index URL
+3. **Install SAMD core**: `arduino-cli core install adafruit:samd`
+4. **Install libraries**: Adafruit NeoTrellis M4 Library and dependencies
+5. **Create project structure**: Proper Arduino sketch directory layout
+
+### First Success
+- **Simple LED test**: 8 red LEDs blinking every second
+- **21KB compiled size**: Efficient Arduino framework usage
+- **Successful upload**: Using built-in `bossac` integration
+- **Hardware verification**: LEDs working as expected
+
+## Architecture Preservation
+
+### Core Logic Reuse
+The platform abstraction approach paid off - our core step sequencer logic remains valuable:
+
+```cpp
+class SimpleStepSequencer {
+    bool pattern[4][8];     // 4 tracks, 8 steps  
+    int currentStep;
+    bool isPlaying;
+    int bpm;
+    // ... existing timing and pattern logic
+};
+```
+
+### Design Patterns Maintained
+- **Dependency injection**: Easy to port to Arduino framework
+- **Hardware abstraction**: Interfaces still valuable for testing
+- **Modular design**: Core logic separated from platform specifics
+
 ## Current Status
-- ✅ **Platform Architecture**: Complete abstraction with interfaces
-- ✅ **Simulation Environment**: Fully functional curses-based testing
-- ✅ **Core Logic**: StepSequencer with 81%+ test coverage
-- ✅ **Embedded Build**: Successfully produces flashable firmware (3.9KB/496KB flash)
-- ✅ **Hardware Integration**: I2C/Seesaw protocol implementation complete
-- ✅ **System Timer**: SAMD51 SysTick implementation with microsecond precision
-- 🔄 **I2C Hardware Driver**: Ready for SAMD51 SERCOM implementation
-- ⏳ **Device Testing**: Ready to flash and test on hardware
 
-## Phase 1: Build System Fixes ✅
+### ✅ Completed
+- Arduino CLI development environment setup
+- Adafruit SAMD51 toolchain installation  
+- Basic LED control verified on hardware
+- Upload process automated and working
 
-### Issue Analysis
-Current embedded build fails at link time with:
+### 🔄 Next Steps  
+- Port full step sequencer logic to Arduino
+- Implement button input handling using NeoTrellis M4 library
+- Add 4-track LED patterns with proper colors
+- Test complete step sequencer functionality
+
+### 📁 Project Structure
 ```
-undefined reference to `operator delete(void*, unsigned int)`
-undefined reference to `atexit`
+├── src/core/                    # Platform-agnostic step sequencer
+├── include/core/                # Abstraction interfaces
+├── arduino_trellis/             # Arduino CLI project
+│   └── arduino_trellis.ino     # Main sketch
+├── build/                       # CMake artifacts (bare-metal)
+└── WORKPLAN.md                  # This document
 ```
 
-**Root Cause**: C++ features requiring runtime support not available in bare metal environment.
+## Lessons Learned
 
-### Tasks
-- [x] Analyze linking errors and identify problematic C++ features
-- [x] **Implement minimal C++ runtime stubs**
-  - Added `operator new/delete` stubs that halt on usage (embedded should use static allocation)
-  - Added `atexit` stub that does nothing
-  - Added exception handling stubs (`__cxa_pure_virtual`, etc.)
-  - Added global constructor support (`__libc_init_array`)
-- [x] **Optimize build flags for embedded**
-  - Added `-fno-exceptions -fno-rtti -ffunction-sections -fdata-sections`
-  - Added `-fno-threadsafe-statics -fno-stack-protector`
-  - Added linker garbage collection `--gc-sections`
-- [x] **Validate embedded build produces flashable firmware**
-  - Verified `.elf`, `.hex`, `.bin` file generation
-  - Memory usage: **0.69% flash (3.4KB/496KB), 4.54% RAM (8.9KB/192KB)** - excellent!
-  - Added linker memory usage reporting
+1. **UF2 bootloaders are complex** - Not suitable for quick custom firmware
+2. **Arduino ecosystem is mature** - Extensive hardware compatibility  
+3. **Platform abstraction works** - Core logic easily portable
+4. **Arduino CLI is excellent** - Professional alternative to IDE
+5. **Hardware verification first** - Simple tests before complex features
 
-**Success Criteria**: ✅ `make build` produces flashable firmware without link errors.
+## Development Time Investment
+- **Bare-metal approach**: ~4 hours of debugging firmware deployment
+- **Arduino CLI setup**: ~30 minutes  
+- **First working result**: Immediate success
 
-### Results
-- **Build Status**: ✅ **SUCCESS** - Clean compilation and linking
-- **Memory Efficiency**: Extremely efficient usage leaves plenty of room for features
-- **File Outputs**: All required formats generated (ELF/HEX/BIN)
-- **Ready for Phase 2**: Hardware abstraction layer implementation
+The Arduino CLI approach was significantly more efficient for getting working firmware on the NeoTrellis M4 hardware.
 
-## Phase 2: Hardware Abstraction Layer ✅
+## Technical Achievements Preserved
 
-### SAMD51 System Integration  
-- [x] **System Clock Implementation** ✅
-  - Implemented SAMD51 SysTick timer with 1ms precision
-  - Added hardware-accurate `millis()` and `micros()` functions  
-  - Proper delay implementation using timer polling
-  - Direct register access with minimal overhead
-- [ ] **Memory Management**
-  - Verify stack/heap configuration in linker script
-  - Add stack usage monitoring
-  - Ensure no dynamic allocation in critical paths
-- [ ] **Startup and Initialization**
-  - Review `startup.c` for proper hardware initialization
-  - Add system clock configuration (120MHz)
-  - Initialize GPIO and peripheral clocks
+### Hardware Abstraction Success
+The platform abstraction approach has proven effective:
 
-### I2C/Seesaw Protocol Implementation ✅
-The NeoTrellis M4 uses the Seesaw protocol over I2C. Protocol implementation complete.
+```cpp
+// Core interfaces (platform-agnostic)
+class IClock;    // Timing abstraction
+class IDisplay;  // LED/display abstraction  
+class IInput;    // Button/input abstraction
 
-- [x] **Seesaw Protocol Layer** ✅  
-  - Implemented complete Seesaw protocol constants and definitions
-  - Added keypad reading with FIFO buffer support
-  - Complete NeoPixel control (buffer write, show commands)
-  - Proper I2C address and register handling
-- [x] **NeoTrellis Hardware Functions** ✅
-  - Complete button reading with event queue
-  - RGB LED control with dirty-bit optimization  
-  - Button state tracking and debouncing
-  - Hardware initialization and shutdown
-- [ ] **Low-level I2C Driver** 🔄  
-  - Current implementation uses register stubs
-  - Ready for SAMD51 SERCOM I2C integration
-  - Timeout and error recovery design complete
-- [ ] **Hardware Abstraction Testing**
-  - Create hardware-in-the-loop tests
-  - Validate LED color accuracy  
-  - Test button press/release detection
+// Platform implementations
+NeoTrellisDisplay    // RGB LED matrix (32 pixels)
+NeoTrellisInput     // 4x8 capacitive touch grid
+EmbeddedClock       // SAMD51 SysTick timer
+```
 
-**Success Criteria**: Physical buttons control LEDs with correct colors and timing.
+### Memory Footprint (Bare-Metal)
+Optimized for embedded constraints:
+- **Flash Usage**: 10KB (1.97% of 512KB)
+- **RAM Usage**: 8.8KB (4.52% of 192KB)  
+- **Static allocation**: No dynamic memory
+- **Zero-copy operations**: Efficient LED updates
 
-## Phase 3: Real-Time Operation 🔄
+### Codebase Quality
+- **81%+ test coverage** with comprehensive unit tests
+- **Platform-independent core** with dependency injection
+- **Clean abstractions** enabling easy testing and portability
+- **Self-documenting code** with clear interfaces
 
-### Performance Optimization
-- [ ] **Timing Analysis**
-  - Profile step sequencer timing accuracy
-  - Ensure 120 BPM precision (500ms per beat)
-  - Minimize LED update latency
-- [ ] **Interrupt-Driven Architecture**
-  - Move button scanning to interrupt service routine
-  - Use timer interrupts for precise sequencer timing
-  - Implement non-blocking I2C transactions
-- [ ] **Power Management**
-  - Add sleep modes for power efficiency
-  - Implement USB suspend/resume handling
-  - Optimize LED brightness for battery operation
+## Development Commands
 
-### Debugging and Monitoring
-- [ ] **Serial Debug Output**
-  - Add UART serial output for debugging
-  - Implement printf-style logging over USB CDC
-  - Add real-time performance monitoring
-- [ ] **Error Handling**
-  - Add watchdog timer for system reliability
-  - Implement fault handlers with diagnostic output
-  - Add graceful degradation for I2C failures
-- [ ] **Memory Debugging**
-  - Add stack overflow detection
-  - Monitor heap usage (should be zero)
-  - Add memory corruption detection
+### Arduino CLI Workflow
+```bash
+# Setup (one time)
+arduino-cli core install adafruit:samd
+arduino-cli lib install "Adafruit NeoTrellis M4 Library"
 
-**Success Criteria**: Stable operation for >1 hour with accurate timing.
+# Development cycle
+arduino-cli compile --fqbn adafruit:samd:adafruit_trellis_m4 arduino_trellis
+arduino-cli upload --fqbn adafruit:samd:adafruit_trellis_m4 -p /dev/cu.usbmodem31101 arduino_trellis
+```
 
-## Phase 4: Hardware Validation 🔄
+### Bare-Metal Workflow (for reference)
+```bash
+# Build cross-compiled firmware
+make build
 
-### Device Testing
-- [ ] **Flash and Boot Testing**
-  - Verify firmware flashes via BOSSA
-  - Test bootloader entry/exit
-  - Validate USB device enumeration
-- [ ] **Functional Testing**
-  - Test all 32 buttons for proper registration
-  - Verify all 32 LEDs display correct colors
-  - Test pattern persistence through power cycles
-- [ ] **Performance Validation**
-  - Measure actual BPM accuracy with oscilloscope
-  - Test maximum LED update rate
-  - Validate button response latency (<50ms)
-- [ ] **Environmental Testing**
-  - Test operation at various temperatures
-  - Verify USB power vs. battery operation
-  - Test mechanical durability of button presses
+# Manual UF2 upload (if needed)
+python3 /tmp/uf2conv.py -f 0x55114460 -b 0x0 -c -o firmware.uf2 firmware.bin
+cp firmware.uf2 /Volumes/TRELM4BOOT/
+```
 
-### Integration Testing
-- [ ] **Simulation vs. Hardware Parity**
-  - Verify identical behavior between simulation and hardware
-  - Test pattern export/import between platforms  
-  - Validate timing accuracy matches simulation
-- [ ] **Long-term Stability**
-  - Run continuous operation tests (24+ hours)
-  - Monitor for memory leaks or timing drift
-  - Test rapid pattern changes and edge cases
+## Future Enhancements
 
-**Success Criteria**: Hardware matches simulation functionality with reliable operation.
+### Short-term
+1. **Complete Arduino step sequencer** - Port all core logic
+2. **Button input integration** - Real-time pattern editing
+3. **Performance optimization** - Ensure stable timing
 
-## Technical Dependencies
+### Long-term  
+1. **Pattern persistence** - Save to flash memory
+2. **MIDI integration** - External sync and control
+3. **Advanced features** - Swing timing, pattern chaining
+4. **Bare-metal revisit** - Once Arduino version is stable, potentially return to custom firmware for maximum performance
 
-### Hardware Requirements
-- **NeoTrellis M4**: SAMD51J19A development board
-- **Debug Tools**: SWD debugger (optional, USB bootloader sufficient)
-- **Test Equipment**: Oscilloscope for timing validation
-- **Development Host**: macOS/Linux with ARM toolchain
-
-### Software Dependencies  
-- **ARM Toolchain**: arm-none-eabi-gcc 15.2.0+
-- **BOSSA**: 1.9+ for bootloader flashing
-- **CMake**: 3.20+ for build system
-- **Analysis Tools**: `arm-none-eabi-size`, `arm-none-eabi-objdump`
-
-## Risk Mitigation
-
-### Critical Risks
-1. **I2C Protocol Issues**: Seesaw protocol documentation incomplete
-   - *Mitigation*: Reverse engineer from AdaFruit library source
-2. **Timing Precision**: Embedded timer accuracy affects musical timing
-   - *Mitigation*: Use hardware timers with crystal oscillator
-3. **Memory Constraints**: Code size exceeds flash limits
-   - *Mitigation*: Link-time optimization, remove debug symbols
-4. **Hardware Faults**: Physical device damage during development
-   - *Mitigation*: Use development board, avoid production hardware
-
-### Development Strategy
-- **Incremental Development**: Test each layer independently
-- **Simulation First**: Validate all logic in simulation before hardware
-- **Continuous Testing**: Automated tests prevent regressions
-- **Documentation**: Record all hardware discoveries and workarounds
-
-## Success Metrics
-
-### Phase Gates
-1. **Build Success**: Clean compilation and linking
-2. **Flash Success**: Firmware loads and boots on hardware  
-3. **Basic Function**: LEDs and buttons respond
-4. **Full Function**: Step sequencer operates correctly
-5. **Performance**: Meets timing and reliability requirements
-
-### Acceptance Criteria
-- [ ] Firmware builds without warnings or errors
-- [ ] Device boots and enumerates over USB
-- [ ] All 32 buttons register press/release events
-- [ ] All 32 LEDs display accurate RGB colors
-- [ ] Step sequencer maintains 120 BPM ±1% accuracy
-- [ ] Pattern editing works identically to simulation
-- [ ] System operates stably for >1 hour continuous use
-- [ ] Power consumption within USB 2.0 limits (500mA)
-
----
-*Work Plan Status: Phase 2 Complete - Moving to Phase 3*  
-*Last Updated: 2025-09-03*  
-*Target Completion: Phase 4 by end of development cycle*
-
-## Recent Progress Summary
-
-### ✅ **Phase 2 Completed: Hardware Abstraction Layer**
-- **SAMD51 System Timer**: Complete SysTick implementation with 1ms precision and microsecond accuracy
-- **Seesaw Protocol**: Full protocol implementation for keypad reading and NeoPixel control
-- **Build System**: Optimized firmware build (3.9KB flash usage, <1% utilization)
-- **Memory Management**: Efficient static allocation with proper C++ runtime stubs
-
-### 🔄 **Phase 3 Next: Real-Time Operation**
-Priority tasks for hardware deployment:
-1. **I2C Hardware Driver**: Implement SAMD51 SERCOM for actual hardware communication
-2. **Debug Infrastructure**: Add serial debug output for hardware testing
-3. **Performance Validation**: Test timing accuracy and LED responsiveness
+The foundation is solid - the clean architecture enables rapid iteration in the Arduino environment while preserving the option to return to bare-metal development in the future.

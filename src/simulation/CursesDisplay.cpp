@@ -46,9 +46,9 @@ void CursesDisplay::init() {
     box(ledWindow_, 0, 0);
     box(infoWindow_, 0, 0);
     
-    // Title
-    mvprintw(0, 2, "NeoTrellis M4 Simulator - 4x8 Grid");
-    mvprintw(1, 2, "Use keyboard keys to trigger buttons:");
+    // Title and instructions
+    mvprintw(0, 2, "NeoTrellis M4 Step Sequencer Simulator - 4x8 Grid");
+    mvprintw(1, 2, "Step Sequencer: RED=Track0, GREEN=Track1, BLUE=Track2, YELLOW=Track3 | Press ESC to quit");
     
     initialized_ = true;
     drawGrid();
@@ -166,8 +166,8 @@ void CursesDisplay::drawGrid() {
                 
                 // Use colored blocks to represent LEDs
                 wattron(ledWindow_, COLOR_PAIR(colorPair));
-                mvwprintw(ledWindow_, winRow, winCol, "██");
-                mvwprintw(ledWindow_, winRow + 1, winCol, "██");
+                mvwprintw(ledWindow_, winRow, winCol, "##");
+                mvwprintw(ledWindow_, winRow + 1, winCol, "##");
                 wattroff(ledWindow_, COLOR_PAIR(colorPair));
                 
                 led.dirty = false;
@@ -183,10 +183,9 @@ void CursesDisplay::drawInfo() {
     werase(infoWindow_);
     box(infoWindow_, 0, 0);
     
-    // Keyboard mapping info
-    mvwprintw(infoWindow_, 1, 2, "Keyboard Layout:");
-    mvwprintw(infoWindow_, 2, 2, "Row 0: 1 2 3 4 5 6 7 8");
-    mvwprintw(infoWindow_, 3, 2, "Row 1: Q W E R T Y U I");
-    mvwprintw(infoWindow_, 4, 2, "Row 2: A S D F G H J K");
-    mvwprintw(infoWindow_, 5, 2, "Row 3: Z X C V B N M ,");
+    // Keyboard mapping and usage info
+    mvwprintw(infoWindow_, 1, 2, "Controls: Press keys to toggle steps on/off. Bright colors = current playback position");
+    mvwprintw(infoWindow_, 2, 2, "Track 0 (RED):    1 2 3 4 5 6 7 8    |  Track 1 (GREEN):  Q W E R T Y U I");
+    mvwprintw(infoWindow_, 3, 2, "Track 2 (BLUE):   A S D F G H J K    |  Track 3 (YELLOW): Z X C V B N M ,");
+    mvwprintw(infoWindow_, 4, 2, "Sequencer is playing at 120 BPM with a demo pattern. Modify it!");
 }

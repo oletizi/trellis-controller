@@ -1,5 +1,4 @@
-#include <cstdint>
-#include <array>
+#include <stdint.h>
 #include "NeoTrellis.h"
 #include "StepSequencer.h"
 
@@ -8,6 +7,12 @@ constexpr uint32_t BUFFER_SIZE = 256;
 
 NeoTrellis trellis;
 StepSequencer sequencer;
+
+void handleButtonEvent(keyEvent evt);
+void updateLED(uint8_t index, bool active);
+void updatePlayhead();
+uint32_t millis();
+void delay(uint32_t ms);
 
 void setup() {
     trellis.begin();
@@ -24,6 +29,10 @@ void setup() {
     
     sequencer.init(120, 16);
 }
+
+void handleButtonEvent(keyEvent evt);
+void updateLED(uint8_t index, bool active);
+void updatePlayhead();
 
 void handleButtonEvent(keyEvent evt) {
     uint8_t row = evt.bit.NUM / 8;
@@ -91,14 +100,12 @@ int main() {
     return 0;
 }
 
-extern "C" {
-    uint32_t millis() {
-        static uint32_t milliseconds = 0;
-        return milliseconds++;
-    }
-    
-    void delay(uint32_t ms) {
-        volatile uint32_t count = ms * 1000;
-        while(count--);
-    }
+uint32_t millis() {
+    static uint32_t milliseconds = 0;
+    return milliseconds++;
+}
+
+void delay(uint32_t ms) {
+    volatile uint32_t count = ms * 1000;
+    while(count--);
 }

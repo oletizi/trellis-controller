@@ -6,29 +6,19 @@ project(TrellisStepSequencer
     LANGUAGES C CXX ASM
 )
 
-# ARM toolchain configuration
-set(CMAKE_SYSTEM_NAME Generic)
-set(CMAKE_SYSTEM_PROCESSOR arm)
-set(CMAKE_C_COMPILER arm-none-eabi-gcc)
-set(CMAKE_CXX_COMPILER arm-none-eabi-g++)
-set(CMAKE_ASM_COMPILER arm-none-eabi-gcc)
-set(CMAKE_AR arm-none-eabi-ar)
-set(CMAKE_OBJCOPY arm-none-eabi-objcopy)
-set(CMAKE_OBJDUMP arm-none-eabi-objdump)
-set(SIZE arm-none-eabi-size)
-
-set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
-
 # C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 11)
 
-# MCU specific flags for SAMD51
-set(MCU_FLAGS "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16")
-set(CMAKE_C_FLAGS "${MCU_FLAGS} -ffunction-sections -fdata-sections -Wall -Wextra")
-set(CMAKE_CXX_FLAGS "${MCU_FLAGS} -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti -Wall -Wextra")
-set(CMAKE_EXE_LINKER_FLAGS "${MCU_FLAGS} -specs=nano.specs -specs=nosys.specs -Wl,--gc-sections")
+# Check if we're cross-compiling for ARM
+if(NOT CMAKE_CROSSCOMPILING)
+    message(FATAL_ERROR "This project requires ARM cross-compilation. Please use: cmake -DCMAKE_TOOLCHAIN_FILE=toolchain-arm-none-eabi.cmake ..")
+endif()
+
+# MCU specific flags are now set in the toolchain file
+# Additional project-specific flags can be added here
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -T${CMAKE_SOURCE_DIR}/samd51.ld")
 
 # Define SAMD51 specific settings
 add_definitions(
@@ -38,7 +28,7 @@ add_definitions(
     -DARDUINO_ARCH_SAMD
 )
 
-# Include directories
+# Include directories (include our custom headers first)
 include_directories(
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/lib
@@ -53,11 +43,15 @@ file(GLOB_RECURSE SOURCES
 # Create executable
 add_executable(${PROJECT_NAME}.elf ${SOURCES})
 
+# Find tools from toolchain
+find_program(ARM_SIZE arm-none-eabi-size)
+find_program(ARM_OBJCOPY arm-none-eabi-objcopy)
+
 # Generate hex and bin files
 add_custom_command(TARGET ${PROJECT_NAME}.elf POST_BUILD
-    COMMAND ${CMAKE_OBJCOPY} -O ihex ${PROJECT_NAME}.elf ${PROJECT_NAME}.hex
-    COMMAND ${CMAKE_OBJCOPY} -O binary ${PROJECT_NAME}.elf ${PROJECT_NAME}.bin
-    COMMAND ${SIZE} ${PROJECT_NAME}.elf
+    COMMAND ${ARM_OBJCOPY} -O ihex ${PROJECT_NAME}.elf ${PROJECT_NAME}.hex
+    COMMAND ${ARM_OBJCOPY} -O binary ${PROJECT_NAME}.elf ${PROJECT_NAME}.bin
+    COMMAND ${ARM_SIZE} ${PROJECT_NAME}.elf
     COMMENT "Building ${PROJECT_NAME}.hex and ${PROJECT_NAME}.bin"
 )
 

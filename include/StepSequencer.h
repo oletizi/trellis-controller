@@ -1,8 +1,7 @@
 #ifndef STEP_SEQUENCER_H
 #define STEP_SEQUENCER_H
 
-#include <cstdint>
-#include <array>
+#include <stdint.h>
 
 class StepSequencer {
 public:
@@ -38,9 +37,9 @@ public:
     TrackTrigger getTriggeredTracks();
     
 private:
-    std::array<std::array<bool, MAX_STEPS>, MAX_TRACKS> pattern_;
-    std::array<uint8_t, MAX_TRACKS> trackVolumes_;
-    std::array<bool, MAX_TRACKS> trackMutes_;
+    bool pattern_[MAX_TRACKS][MAX_STEPS];
+    uint8_t trackVolumes_[MAX_TRACKS];
+    bool trackMutes_[MAX_TRACKS];
     
     uint16_t bpm_;
     uint8_t stepCount_;
@@ -54,3 +53,5 @@ private:
     void calculateTicksPerStep();
     void advanceStep();
 };
+
+#endif

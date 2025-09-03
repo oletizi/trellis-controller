@@ -1,4 +1,5 @@
 #include "StepSequencer.h"
+#include <string.h>
 
 StepSequencer::StepSequencer() 
     : bpm_(120)
@@ -8,12 +9,12 @@ StepSequencer::StepSequencer()
     , tickCounter_(0)
     , lastTriggerTime_(0) {
     
-    for (auto& track : pattern_) {
-        track.fill(false);
-    }
+    memset(pattern_, 0, sizeof(pattern_));
     
-    trackVolumes_.fill(127);
-    trackMutes_.fill(false);
+    for (int i = 0; i < MAX_TRACKS; i++) {
+        trackVolumes_[i] = 127;
+        trackMutes_[i] = false;
+    }
     
     calculateTicksPerStep();
 }

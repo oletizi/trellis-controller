@@ -1,8 +1,7 @@
 #ifndef NEOTRELLIS_H
 #define NEOTRELLIS_H
 
-#include <cstdint>
-#include <functional>
+#include <stdint.h>
 
 #define SEESAW_KEYPAD_EDGE_RISING 0x01
 #define SEESAW_KEYPAD_EDGE_FALLING 0x02
@@ -17,7 +16,7 @@ struct keyEvent {
     };
 };
 
-using KeyCallback = std::function<void(keyEvent)>;
+typedef void (*KeyCallback)(keyEvent);
 
 class NeoPixels {
 public:
@@ -62,3 +61,5 @@ private:
     bool writeI2C(uint8_t reg, uint8_t* data, uint8_t len);
     bool readI2C(uint8_t reg, uint8_t* data, uint8_t len);
 };
+
+#endif

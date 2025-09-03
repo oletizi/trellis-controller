@@ -1,5 +1,5 @@
 #include "NeoTrellis.h"
-#include <cstring>
+#include <string.h>
 
 NeoPixels::NeoPixels() : brightness_(50) {
     clear();
@@ -16,7 +16,7 @@ void NeoPixels::setPixelColor(uint8_t index, uint32_t color) {
 }
 
 void NeoPixels::clear() {
-    std::memset(pixels_, 0, sizeof(pixels_));
+    memset(pixels_, 0, sizeof(pixels_));
 }
 
 void NeoPixels::show() {
@@ -28,9 +28,9 @@ void NeoPixels::updateHardware() {
 }
 
 NeoTrellis::NeoTrellis() : i2cAddr_(0x2E) {
-    std::memset(keyStates_, 0, sizeof(keyStates_));
-    for (auto& callback : callbacks_) {
-        callback = nullptr;
+    memset(keyStates_, 0, sizeof(keyStates_));
+    for (int i = 0; i < NUM_KEYS; i++) {
+        callbacks_[i] = nullptr;
     }
 }
 

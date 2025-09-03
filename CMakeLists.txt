@@ -50,6 +50,7 @@ set(EMBEDDED_SOURCES
     ${CMAKE_SOURCE_DIR}/src/embedded/main.cpp
     ${CMAKE_SOURCE_DIR}/src/embedded/NeoTrellisDisplay.cpp
     ${CMAKE_SOURCE_DIR}/src/embedded/NeoTrellisInput.cpp
+    ${CMAKE_SOURCE_DIR}/src/embedded/SeesawI2C.cpp
     ${CMAKE_SOURCE_DIR}/src/embedded/runtime_stubs.cpp
 )
 

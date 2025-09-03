@@ -1,8 +1,9 @@
 #include "NeoTrellisDisplay.h"
-#include "NeoTrellisHardware.h"
+#include "SeesawI2C.h"
+#include "SeesawProtocol.h"
 
-// Global NeoTrellis instance (defined here, declared in header)
-NeoTrellis g_neoTrellis;
+// Seesaw I2C interface for NeoTrellis (shared between display and input)
+SeesawI2C g_seesaw;
 
 NeoTrellisDisplay::NeoTrellisDisplay() : initialized_(false) {
     clear();
@@ -11,10 +12,14 @@ NeoTrellisDisplay::NeoTrellisDisplay() : initialized_(false) {
 void NeoTrellisDisplay::init() {
     if (initialized_) return;
     
-    // Initialize NeoTrellis hardware
-    if (!g_neoTrellis.begin()) {
-        // Hardware initialization failed - continue anyway for simulation
+    // Initialize Seesaw I2C communication
+    if (!g_seesaw.begin()) {
+        // I2C initialization failed - continue anyway for testing
     }
+    
+    // Configure NeoPixel settings for NeoTrellis M4
+    g_seesaw.setNeoPixelPin(Seesaw::NEOTRELLIS_NEOPIX_PIN);
+    g_seesaw.setNeoPixelLength(ROWS * COLS); // 4x8 = 32 LEDs
     
     initialized_ = true;
     clear();
@@ -56,18 +61,32 @@ void NeoTrellisDisplay::refresh() {
 }
 
 void NeoTrellisDisplay::updateHardware() {
+    // Build RGB data for all dirty LEDs
+    uint8_t rgbData[ROWS * COLS * 3]; // 3 bytes per LED (R,G,B)
+    bool anyDirty = false;
+    
     for (uint8_t row = 0; row < ROWS; row++) {
         for (uint8_t col = 0; col < COLS; col++) {
             LED& led = leds_[row][col];
             if (led.dirty) {
-                // Convert row,col to linear index for NeoTrellis
+                anyDirty = true;
                 uint8_t index = row * COLS + col;
-                // Pack RGB into 32-bit color (0x00RRGGBB format)
-                uint32_t color = ((uint32_t)led.r << 16) | ((uint32_t)led.g << 8) | led.b;
-                g_neoTrellis.pixels.setPixelColor(index, color);
+                
+                // NeoPixel format: GRB order (not RGB)
+                rgbData[index * 3 + 0] = led.g; // Green
+                rgbData[index * 3 + 1] = led.r; // Red  
+                rgbData[index * 3 + 2] = led.b; // Blue
+                
                 led.dirty = false;
             }
         }
     }
-    g_neoTrellis.pixels.show();
+    
+    if (anyDirty) {
+        // Send RGB data to Seesaw NeoPixel buffer
+        g_seesaw.setNeoPixelBuffer(0, rgbData, sizeof(rgbData));
+        
+        // Trigger LED update
+        g_seesaw.showNeoPixels();
+    }
 }

@@ -1,5 +1,6 @@
 #include "NeoTrellisInput.h"
-#include "NeoTrellisHardware.h"
+#include "SeesawI2C.h"
+#include "SeesawProtocol.h"
 
 #ifdef __SAMD51J19A__
     #include "string.h"
@@ -9,6 +10,9 @@
 #else
     #include <cstring>
 #endif
+
+// External Seesaw I2C interface (shared with display)
+extern SeesawI2C g_seesaw;
 
 NeoTrellisInput::NeoTrellisInput(IClock* clock) 
     : clock_(clock), initialized_(false), eventQueueHead_(0), eventQueueTail_(0), eventQueueCount_(0) {
@@ -35,12 +39,38 @@ void NeoTrellisInput::shutdown() {
 bool NeoTrellisInput::pollEvents() {
     if (!initialized_) return false;
     
-    // Read hardware state via NeoTrellis API
-    g_neoTrellis.read();
+    // Read keypad events from Seesaw FIFO
+    uint8_t eventCount;
+    if (g_seesaw.readKeypadCount(&eventCount) != SeesawI2C::SUCCESS) {
+        return eventQueueCount_ > 0; // Return existing events on error
+    }
     
-    // For now, since the hardware polling isn't fully implemented,
-    // we'll simulate some button events for testing
-    // TODO: Implement proper hardware button reading
+    if (eventCount > 0) {
+        // Read up to available events (max 8 at a time to avoid overflow)
+        uint8_t readCount = (eventCount > 8) ? 8 : eventCount;
+        Seesaw::KeyEvent events[8];
+        
+        if (g_seesaw.readKeypadFIFO((uint8_t*)events, readCount) == SeesawI2C::SUCCESS) {
+            // Process each event
+            for (uint8_t i = 0; i < readCount; i++) {
+                uint8_t keyNum = events[i].bit.NUM;
+                bool pressed = (events[i].bit.EDGE == Seesaw::KEYPAD_EDGE_RISING);
+                
+                // Convert linear key number to row/col (4x8 layout)
+                uint8_t row = keyNum / COLS;
+                uint8_t col = keyNum % COLS;
+                
+                if (row < ROWS && col < COLS) {
+                    // Update button state and add event
+                    bool wasPressed = buttonStates_[row][col];
+                    if (pressed != wasPressed) {
+                        buttonStates_[row][col] = pressed;
+                        addEvent(row, col, pressed);
+                    }
+                }
+            }
+        }
+    }
     
     return eventQueueCount_ > 0;
 }

@@ -1,0 +1,99 @@
+{
+  "version": "1.0.0",
+  "description": "External dependencies for Trellis Controller embedded project",
+  "dependencies_root": "../.trellis-controller-deps",
+  "dependencies": [
+    {
+      "name": "Adafruit_Seesaw",
+      "description": "Arduino library driver for seesaw multi-use chip",
+      "url": "https://github.com/adafruit/Adafruit_Seesaw.git",
+      "local_path": "Adafruit_Seesaw",
+      "commit_hash": "985b41efae3d9a8cba12a7b4d9ff0d226f9e0759",
+      "status": "cloned",
+      "usage": "I2C/Seesaw protocol implementation for NeoTrellis communication",
+      "files_needed": [
+        "Adafruit_seesaw.h",
+        "Adafruit_seesaw.cpp", 
+        "seesaw_neopixel.h",
+        "seesaw_neopixel.cpp"
+      ]
+    },
+    {
+      "name": "Adafruit_NeoTrellisM4",
+      "description": "Example sketches and reference for NeoTrellis M4 board",
+      "url": "https://github.com/adafruit/Adafruit_NeoTrellisM4.git",
+      "local_path": "Adafruit_NeoTrellisM4",
+      "commit_hash": "441e2de0ea36bca52896061a6d5aa452931d2172",
+      "status": "cloned",
+      "usage": "Reference implementations and hardware examples",
+      "files_needed": [
+        "examples/",
+        "hardware definitions"
+      ]
+    },
+    {
+      "name": "Arduino_Core_SAMD",
+      "description": "Arduino core for SAMD microcontrollers",
+      "url": "https://github.com/arduino/ArduinoCore-samd.git",
+      "local_path": "ArduinoCore-samd", 
+      "commit_hash": "993398cb7a23a4e0f821a73501ae98053773165b",
+      "status": "cloned",
+      "usage": "SAMD51 hardware abstraction layer, I2C drivers, system initialization",
+      "files_needed": [
+        "cores/arduino/",
+        "variants/trellis_m4/",
+        "libraries/Wire/"
+      ]
+    }
+  ],
+  "additional_dependencies": [
+    {
+      "name": "Adafruit_BusIO", 
+      "url": "https://github.com/adafruit/Adafruit_BusIO.git",
+      "local_path": "Adafruit_BusIO",
+      "commit_hash": "e75ac29ca6a975812671b9360e892770793237fd",
+      "reason": "Required by Adafruit_Seesaw for Adafruit_I2CDevice.h",
+      "status": "cloned_but_not_used"
+    }
+  ],
+  "build_integration": {
+    "build_system": "manual_cmake_integration",
+    "note": "Arduino libraries do not use CMake - manual integration required",
+    "cmake_include_paths": [
+      "../.trellis-controller-deps/Adafruit_Seesaw/",
+      "../.trellis-controller-deps/Adafruit_BusIO/",
+      "../.trellis-controller-deps/ArduinoCore-samd/cores/arduino/",
+      "../.trellis-controller-deps/ArduinoCore-samd/variants/trellis_m4/"
+    ],
+    "source_files_needed": [
+      "../.trellis-controller-deps/Adafruit_Seesaw/Adafruit_seesaw.cpp",
+      "../.trellis-controller-deps/Adafruit_Seesaw/Adafruit_NeoTrellis.cpp", 
+      "../.trellis-controller-deps/Adafruit_Seesaw/seesaw_neopixel.cpp",
+      "../.trellis-controller-deps/Adafruit_BusIO/Adafruit_I2CDevice.cpp"
+    ],
+    "compilation_steps": [
+      "1. Clone missing dependencies (Adafruit_BusIO)",
+      "2. Add include paths to CMakeLists.txt",
+      "3. Add source files to embedded build",
+      "4. Handle Arduino.h dependencies with compatibility layer",
+      "5. Replace Wire library calls with SAMD51 I2C implementation"
+    ],
+    "implementation_approach": {
+      "chosen_solution": "Extract and reimplement Seesaw protocol",
+      "rationale": "Avoided Arduino library dependencies by implementing minimal Seesaw I2C protocol",
+      "files_created": [
+        "src/embedded/SeesawProtocol.h - Protocol constants and definitions",
+        "src/embedded/SeesawI2C.h/cpp - Minimal I2C implementation for Seesaw",
+        "Updated NeoTrellisDisplay.cpp - Uses Seesaw for LED control",
+        "Updated NeoTrellisInput.cpp - Uses Seesaw for button reading"
+      ],
+      "status": "COMPLETED - Builds successfully, ready for hardware testing"
+    }
+  },
+  "notes": [
+    "Dependencies are stored outside project tree to avoid cluttering repository",
+    "Specific commit hashes ensure reproducible builds",
+    "Only required files are integrated, not entire repositories",
+    "Local modifications should be documented and minimized"
+  ]
+}

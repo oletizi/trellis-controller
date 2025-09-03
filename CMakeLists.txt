@@ -17,9 +17,12 @@ if(NOT CMAKE_CROSSCOMPILING)
 endif()
 
 # MCU specific flags are now set in the toolchain file
-# Additional project-specific flags for embedded
+# Additional project-specific flags for embedded C++
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti -fno-use-cxa-atexit")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-threadsafe-statics -fno-stack-protector")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -T${CMAKE_SOURCE_DIR}/samd51.ld")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections -Wl,--print-memory-usage")
 
 # Define SAMD51 specific settings
 add_definitions(
@@ -47,6 +50,7 @@ set(EMBEDDED_SOURCES
     ${CMAKE_SOURCE_DIR}/src/embedded/main.cpp
     ${CMAKE_SOURCE_DIR}/src/embedded/NeoTrellisDisplay.cpp
     ${CMAKE_SOURCE_DIR}/src/embedded/NeoTrellisInput.cpp
+    ${CMAKE_SOURCE_DIR}/src/embedded/runtime_stubs.cpp
 )
 
 # Legacy embedded sources (keep existing hardware drivers)

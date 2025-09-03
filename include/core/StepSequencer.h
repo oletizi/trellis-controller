@@ -7,7 +7,7 @@
 class StepSequencer {
 public:
     static constexpr uint8_t MAX_TRACKS = 4;
-    static constexpr uint8_t MAX_STEPS = 16;
+    static constexpr uint8_t MAX_STEPS = 8;
     
     struct Dependencies {
         IClock* clock = nullptr;

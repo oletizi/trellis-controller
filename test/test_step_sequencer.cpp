@@ -71,14 +71,14 @@ TEST_CASE("StepSequencer - Pattern Management", "[StepSequencer]") {
     SECTION("Multiple patterns") {
         // Create a pattern on track 0
         sequencer.toggleStep(0, 0);
+        sequencer.toggleStep(0, 2);
         sequencer.toggleStep(0, 4);
-        sequencer.toggleStep(0, 8);
-        sequencer.toggleStep(0, 12);
+        sequencer.toggleStep(0, 6);
         
         // Create a different pattern on track 1
         sequencer.toggleStep(1, 1);
+        sequencer.toggleStep(1, 3);
         sequencer.toggleStep(1, 5);
-        sequencer.toggleStep(1, 9);
         
         // Verify patterns are independent
         REQUIRE(sequencer.isStepActive(0, 0) == true);

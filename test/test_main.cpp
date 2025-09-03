@@ -1,0 +1,1 @@
+// Test main is now provided by Catch2::Catch2WithMain

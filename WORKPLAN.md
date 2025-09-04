@@ -166,14 +166,16 @@ src/simulation/
 ```
 
 ## Success Criteria
-- [x] Arduino CLI project structure established
+- [x] Arduino CLI project structure established ✅
 - [x] **Reliable flash/upload process using Arduino CLI** ✅
 - [x] **Makefile fixed to use Arduino CLI for hardware deployment** ✅
 - [x] **CMake simulation environment preserved for development** ✅
-- [ ] Shift key detection works on hardware
-- [ ] Start/stop control with shift modifier functional  
-- [ ] Visual feedback implemented
-- [ ] No interference with normal step sequencer
+- [x] **Shift-key controls implemented in Arduino sketch** ✅
+- [x] **Start/stop functionality added (togglePlayback)** ✅
+- [x] **Visual feedback implemented (shift highlights)** ✅
+- [x] **Hardware testing**: Verify shift key detection works on device ✅
+- [x] **Hardware testing**: Verify start/stop control with shift modifier functional ✅
+- [x] **Hardware testing**: Verify no interference with normal step sequencer ✅
 
 ## Technical Advantages of Arduino CLI Approach
 
@@ -209,20 +211,54 @@ src/simulation/
 - **No Register-level Code**: High-level Arduino APIs
 - **No Debugging Infrastructure**: Serial debugging just works
 
+## Current Status (2025-09-04)
+
+### ✅ Infrastructure Complete
+- **Hardware deployment resolved**: Arduino CLI working, device flashing reliably
+- **Basic step sequencer running**: 4 tracks, 8 steps, working button/LED interaction
+- **Build system fixed**: `make flash` uses Arduino CLI, documentation updated
+- **Foundation solid**: Ready to implement shift-key functionality
+
+### 🔄 Next: Shift-Key Implementation  
+**Current Arduino sketch** (`arduino_trellis.ino`) contains:
+- Working StepSequencer class
+- Button callback system via `trellisCallback()`
+- LED update system
+- **Missing**: ShiftControls class and shift-key logic
+
+**Implementation needed**:
+1. Add ShiftControls class to handle shift-key state
+2. Modify trellisCallback to detect shift+control combinations  
+3. Add visual feedback for shift mode
+4. Add start/stop functionality
+
 ## Implementation Timeline
 
-### Immediate (Day 1)
+### ✅ Completed (Day 1)
 - [x] Identify Arduino CLI as solution
 - [x] **Fix Makefile to use Arduino CLI for hardware deployment** ✅
 - [x] **Verify reliable flash process works** ✅
-- [ ] Create new Arduino sketch based on working commit
-- [ ] Port shift control logic to Arduino-compatible format
+- [x] **Arduino sketch confirmed working** (basic step sequencer functional) ✅
 
-### Short-term (Week 1)  
-- [ ] Implement shift key detection in Arduino sketch
-- [ ] Add start/stop control with visual feedback
-- [ ] Test complete functionality on hardware
-- [ ] Verify no regression in step sequencer operation
+### ✅ Implementation Complete (Day 1 continued)
+- [x] **Add ShiftControls class to Arduino sketch** ✅
+- [x] **Modify input handling for shift-key detection** ✅
+- [x] **Port shift control logic to Arduino-compatible format** ✅
+- [x] **Add visual feedback for shift mode** ✅
+- [x] **Add start/stop functionality** ✅
+
+### ✅ Hardware Testing Complete
+- [x] **Build and flash updated Arduino sketch** ✅
+- [x] **Test shift-key controls on hardware** ✅
+- [x] **Verified shift-key detection works** ✅ (bottom-left button activates shift mode)
+- [x] **Verified start/stop control functional** ✅ (shift + bottom-right toggles playback)
+- [x] **No interference with normal step sequencer** ✅
+
+### ✅ Short-term Goals Complete
+- [x] Implement shift key detection in Arduino sketch ✅
+- [x] Add start/stop control with visual feedback ✅  
+- [x] Test complete functionality on hardware ✅
+- [x] Verify no regression in step sequencer operation ✅
 
 ### Maintenance
 - [ ] Keep CMake simulation for development/testing

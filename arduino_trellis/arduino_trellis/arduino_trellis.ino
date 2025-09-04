@@ -79,6 +79,16 @@ public:
         playing_ = false;
     }
     
+    void togglePlayback() {
+        if (playing_) {
+            stop();
+            Serial.println("Sequencer stopped");
+        } else {
+            start();
+            Serial.println("Sequencer started");
+        }
+    }
+    
     void toggleStep(int track, int step) {
         if (track >= 0 && track < MAX_TRACKS && step >= 0 && step < MAX_STEPS) {
             pattern_[track][step] = !pattern_[track][step];
@@ -117,7 +127,58 @@ public:
     }
 };
 
-// Global sequencer instance
+// Shift Controls Implementation (Arduino compatible)
+class ShiftControls {
+private:
+    static const uint8_t SHIFT_ROW = 3;
+    static const uint8_t SHIFT_COL = 0;  // Bottom-left key
+    static const uint8_t CONTROL_ROW = 3;
+    static const uint8_t CONTROL_COL = 7; // Bottom-right key
+    
+    bool shiftActive_;
+    bool startStopTriggered_;
+    
+public:
+    ShiftControls() : shiftActive_(false), startStopTriggered_(false) {}
+    
+    void handleInput(uint8_t row, uint8_t col, bool pressed) {
+        if (isShiftKey(row, col)) {
+            shiftActive_ = pressed;
+            Serial.print("Shift key ");
+            Serial.println(pressed ? "pressed" : "released");
+        }
+        else if (isControlKey(row, col) && pressed && shiftActive_) {
+            startStopTriggered_ = true;
+            Serial.println("Start/Stop triggered!");
+        }
+    }
+    
+    bool isShiftActive() const {
+        return shiftActive_;
+    }
+    
+    bool shouldHandleAsShiftControl(uint8_t row, uint8_t col) const {
+        return isShiftKey(row, col) || isControlKey(row, col);
+    }
+    
+    bool getAndClearStartStopTrigger() {
+        bool triggered = startStopTriggered_;
+        startStopTriggered_ = false;
+        return triggered;
+    }
+    
+private:
+    bool isShiftKey(uint8_t row, uint8_t col) const {
+        return (row == SHIFT_ROW && col == SHIFT_COL);
+    }
+    
+    bool isControlKey(uint8_t row, uint8_t col) const {
+        return (row == CONTROL_ROW && col == CONTROL_COL);
+    }
+};
+
+// Global instances
+ShiftControls shiftControls;
 StepSequencer sequencer;
 
 // Color definitions
@@ -180,14 +241,26 @@ void handleInput() {
     static bool keyStates[32] = {false}; // Track previous states
     
     for (int i = 0; i < 32; i++) {
-        bool currentState = trellis.justPressed(i);
+        bool currentPressed = trellis.justPressed(i);
+        bool currentReleased = trellis.justReleased(i);
         
-        if (currentState && !keyStates[i]) {
-            // Button just pressed
+        if (currentPressed || currentReleased) {
             int row = i / 8;  // 4 rows
             int col = i % 8;  // 8 columns
             
-            if (row < 4 && col < 8) {
+            // Handle shift controls first
+            if (shiftControls.shouldHandleAsShiftControl(row, col)) {
+                shiftControls.handleInput(row, col, currentPressed);
+                
+                // Check for start/stop trigger
+                if (shiftControls.getAndClearStartStopTrigger()) {
+                    sequencer.togglePlayback();
+                }
+                continue; // Skip normal step processing
+            }
+            
+            // Normal step sequencer input (only on press, only in sequencer area)
+            if (currentPressed && row < 4 && col < 8) {
                 sequencer.toggleStep(row, col);
                 
                 Serial.print("Toggled step [");
@@ -197,11 +270,6 @@ void handleInput() {
                 Serial.print("] -> ");
                 Serial.println(sequencer.isStepActive(row, col) ? "ON" : "OFF");
             }
-            
-            keyStates[i] = true;
-        } else if (!currentState && keyStates[i]) {
-            // Button released
-            keyStates[i] = false;
         }
     }
 }
@@ -234,6 +302,15 @@ void updateDisplay() {
             
             trellis.setPixelColor(ledIndex, color);
         }
+    }
+    
+    // Add shift-key visual feedback
+    if (shiftControls.isShiftActive()) {
+        // Highlight shift key (bottom-left) in white
+        trellis.setPixelColor(24, 0x404040);  // Row 3, Col 0 = index 24
+        
+        // Highlight control key (bottom-right) in dim yellow when shift active
+        trellis.setPixelColor(31, 0x404000);  // Row 3, Col 7 = index 31
     }
     
     trellis.show();

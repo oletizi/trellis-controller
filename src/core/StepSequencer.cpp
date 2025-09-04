@@ -1,4 +1,5 @@
 #include "StepSequencer.h"
+#include "NullMidi.h"
 #ifdef __SAMD51J19A__
     // Embedded environment - use custom string functions
     #include "string.h"
@@ -33,6 +34,7 @@ StepSequencer::StepSequencer()
     , stepCount_(16)
     , currentStep_(0)
     , playing_(true)
+    , midiSyncEnabled_(false)
     , tickCounter_(0)
     , lastStepTime_(0)
     , ownsClock_(false) {
@@ -42,11 +44,18 @@ StepSequencer::StepSequencer()
     for (int i = 0; i < MAX_TRACKS; i++) {
         trackVolumes_[i] = 127;
         trackMutes_[i] = false;
+        trackMidiNotes_[i] = 36 + i;  // C2, C#2, D2, D#2 (typical drum notes)
+        trackMidiChannels_[i] = 10;   // MIDI drum channel (channel 10)
     }
     
     static SystemClock defaultClock;
+    static NullMidiOutput defaultMidiOutput;
+    static NullMidiInput defaultMidiInput;
+    
     clock_ = &defaultClock;
-    ownsClock_ = false; // Static instance, don't delete
+    midiOutput_ = &defaultMidiOutput;
+    midiInput_ = &defaultMidiInput;
+    ownsClock_ = false; // Static instances, don't delete
     
     calculateTicksPerStep();
 }
@@ -56,6 +65,7 @@ StepSequencer::StepSequencer(Dependencies deps)
     , stepCount_(16)
     , currentStep_(0)
     , playing_(true)
+    , midiSyncEnabled_(false)
     , tickCounter_(0)
     , lastStepTime_(0)
     , ownsClock_(false) {
@@ -65,6 +75,8 @@ StepSequencer::StepSequencer(Dependencies deps)
     for (int i = 0; i < MAX_TRACKS; i++) {
         trackVolumes_[i] = 127;
         trackMutes_[i] = false;
+        trackMidiNotes_[i] = 36 + i;  // C2, C#2, D2, D#2 (typical drum notes)
+        trackMidiChannels_[i] = 10;   // MIDI drum channel (channel 10)
     }
     
     if (deps.clock) {
@@ -74,6 +86,20 @@ StepSequencer::StepSequencer(Dependencies deps)
         static SystemClock defaultClock;
         clock_ = &defaultClock;
         ownsClock_ = false; // Static instance, don't delete
+    }
+    
+    if (deps.midiOutput) {
+        midiOutput_ = deps.midiOutput;
+    } else {
+        static NullMidiOutput defaultMidiOutput;
+        midiOutput_ = &defaultMidiOutput;
+    }
+    
+    if (deps.midiInput) {
+        midiInput_ = deps.midiInput;
+    } else {
+        static NullMidiInput defaultMidiInput;
+        midiInput_ = &defaultMidiInput;
     }
     
     calculateTicksPerStep();
@@ -115,6 +141,7 @@ void StepSequencer::tick() {
 void StepSequencer::advanceStep() {
     currentStep_ = (currentStep_ + 1) % stepCount_;
     tickCounter_++;
+    sendMidiTriggers();
 }
 
 void StepSequencer::start() {
@@ -184,4 +211,52 @@ StepSequencer::TrackTrigger StepSequencer::getTriggeredTracks() {
     }
     
     return trigger;
+}
+
+void StepSequencer::setTrackMidiNote(uint8_t track, uint8_t note) {
+    if (track < MAX_TRACKS) {
+        trackMidiNotes_[track] = note;
+    }
+}
+
+void StepSequencer::setTrackMidiChannel(uint8_t track, uint8_t channel) {
+    if (track < MAX_TRACKS) {
+        trackMidiChannels_[track] = channel;
+    }
+}
+
+uint8_t StepSequencer::getTrackMidiNote(uint8_t track) const {
+    return (track < MAX_TRACKS) ? trackMidiNotes_[track] : 0;
+}
+
+uint8_t StepSequencer::getTrackMidiChannel(uint8_t track) const {
+    return (track < MAX_TRACKS) ? trackMidiChannels_[track] : 1;
+}
+
+void StepSequencer::setMidiSync(bool enabled) {
+    midiSyncEnabled_ = enabled;
+}
+
+void StepSequencer::sendMidiTriggers() {
+    if (!midiOutput_ || !midiOutput_->isConnected()) {
+        return;
+    }
+    
+    for (uint8_t track = 0; track < MAX_TRACKS; track++) {
+        if (!trackMutes_[track] && pattern_[track][currentStep_]) {
+            midiOutput_->sendNoteOn(
+                trackMidiChannels_[track], 
+                trackMidiNotes_[track], 
+                trackVolumes_[track]
+            );
+        }
+    }
+}
+
+void StepSequencer::handleMidiInput() {
+    if (!midiInput_) {
+        return;
+    }
+    
+    midiInput_->processMidiInput();
 }

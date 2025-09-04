@@ -264,3 +264,4 @@ An AI agent has successfully completed work when:
 - Document hardware-specific requirements in code comments
 - As much code as possible should be as platform-agnostic as possible. Platform specific touchpoints should be hidden from business logic by common interfaces that we can swap based on the intended build/execution context.
 - We must have a simulated/virtualized environment we can use to run functionality outside of the embedded context.
+- prefer typescript over python where possible

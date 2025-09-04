@@ -1,0 +1,19 @@
+{
+  "name": "trellis-midi-integration-tests",
+  "version": "1.0.0",
+  "description": "MIDI integration tests for Trellis M4 step sequencer",
+  "main": "dist/midi-integration-test.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node dist/midi-integration-test.js",
+    "test:watch": "npm run build && node dist/midi-integration-test.js --watch",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "midi": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

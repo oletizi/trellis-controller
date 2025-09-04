@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 #include "IClock.h"
+#include "IMidiOutput.h"
+#include "IMidiInput.h"
 
 class StepSequencer {
 public:
@@ -11,6 +13,8 @@ public:
     
     struct Dependencies {
         IClock* clock = nullptr;
+        IMidiOutput* midiOutput = nullptr;
+        IMidiInput* midiInput = nullptr;
     };
     
     StepSequencer();
@@ -37,6 +41,14 @@ public:
     uint8_t getTrackVolume(uint8_t track) const;
     bool isTrackMuted(uint8_t track) const;
     
+    void setTrackMidiNote(uint8_t track, uint8_t note);
+    void setTrackMidiChannel(uint8_t track, uint8_t channel);
+    uint8_t getTrackMidiNote(uint8_t track) const;
+    uint8_t getTrackMidiChannel(uint8_t track) const;
+    
+    void setMidiSync(bool enabled);
+    bool isMidiSync() const { return midiSyncEnabled_; }
+    
     struct TrackTrigger {
         uint8_t track;
         uint8_t velocity;
@@ -53,21 +65,28 @@ private:
     bool pattern_[MAX_TRACKS][MAX_STEPS];
     uint8_t trackVolumes_[MAX_TRACKS];
     bool trackMutes_[MAX_TRACKS];
+    uint8_t trackMidiNotes_[MAX_TRACKS];
+    uint8_t trackMidiChannels_[MAX_TRACKS];
     
     uint16_t bpm_;
     uint8_t stepCount_;
     uint8_t currentStep_;
     bool playing_;
+    bool midiSyncEnabled_;
     
     uint32_t ticksPerStep_;
     uint32_t tickCounter_;
     uint32_t lastStepTime_;
     
     IClock* clock_;
+    IMidiOutput* midiOutput_;
+    IMidiInput* midiInput_;
     bool ownsClock_;
     
     void calculateTicksPerStep();
     void advanceStep();
+    void sendMidiTriggers();
+    void handleMidiInput();
 };
 
 #endif

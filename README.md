@@ -59,12 +59,30 @@ NeoTrellisInput   // Hardware button matrix
 - **Target**: AdaFruit NeoTrellis M4 (SAMD51J19A, 120MHz ARM Cortex-M4F)
 - **Memory**: 512KB Flash, 192KB RAM
 - **Interface**: 4×8 capacitive touch grid with RGB LEDs
-- **Toolchain**: ARM GCC cross-compiler (arm-none-eabi-gcc)
-- **Flash Tool**: BOSSA bootloader
+- **Development**: Arduino CLI with Adafruit SAMD core (primary)
+- **Simulation**: ARM GCC cross-compiler (arm-none-eabi-gcc)
+- **Bootloader**: UF2 compatible (Arduino CLI handles automatically)
 
 ## Quick Start
 
 ### Prerequisites
+
+#### Arduino CLI Setup (Required for Hardware)
+```bash
+# Install Arduino CLI
+brew install arduino-cli
+
+# Configure board manager and install SAMD core
+arduino-cli core install adafruit:samd
+
+# Install required libraries
+arduino-cli lib install "Adafruit NeoTrellis M4 Library"
+
+# Verify setup
+arduino-cli core list | grep adafruit:samd
+```
+
+#### CMake Setup (Required for Simulation/Testing)
 ```bash
 # Install dependencies (macOS)
 make install-deps
@@ -83,16 +101,25 @@ make simulation-build
 make simulation-run
 ```
 
-### Embedded Development
+### Embedded Development (Arduino CLI - Primary)
 ```bash
-# Build firmware for NeoTrellis M4
+# Navigate to Arduino project
+cd arduino_trellis
+
+# Build firmware for NeoTrellis M4  
+arduino-cli compile --fqbn adafruit:samd:adafruit_trellis_m4 arduino_trellis
+
+# Flash to device (device automatically enters bootloader mode)
+arduino-cli upload --fqbn adafruit:samd:adafruit_trellis_m4 -p /dev/cu.usbmodem11101 arduino_trellis
+```
+
+### Alternative: CMake Build (Simulation/Testing Only)
+```bash
+# Build firmware using CMake (for simulation and development)
 make build
 
-# Flash to device (connect via USB, double-tap reset)
-make flash
-
-# View firmware info
-make size
+# Note: CMake builds are not compatible with NeoTrellis M4 hardware
+# Use Arduino CLI for actual hardware deployment
 ```
 
 ### Testing & Quality
@@ -166,10 +193,10 @@ NeoTrellisDisplay display;       // Hardware
 ```
 
 ### Build System
-**Dual CMake Configuration:**
-- **Embedded**: Cross-compilation for ARM with custom linker script
-- **Simulation**: Host build with ncurses for terminal interface  
-- **Testing**: Host build with Catch2 framework and coverage analysis
+**Dual Build Architecture:**
+- **Arduino CLI**: Primary hardware deployment (NeoTrellis M4 compatible)
+- **CMake Simulation**: Host build with ncurses for terminal interface  
+- **CMake Testing**: Host build with Catch2 framework and coverage analysis
 
 **Self-Documenting Makefile:**
 ```bash
@@ -205,12 +232,12 @@ make check   # Verifies build environment
 - [x] Curses simulation environment
 - [x] Embedded hardware abstraction
 
-### Phase 2: Hardware Integration ⚠️
-- [x] NeoTrellis display implementation
-- [x] NeoTrellis input implementation  
-- [ ] Complete I2C/Seesaw protocol communication
-- [ ] Hardware button matrix reading
-- [ ] LED brightness and color calibration
+### Phase 2: Hardware Integration ✅
+- [x] Arduino CLI development environment 
+- [x] Working step sequencer on NeoTrellis M4 hardware
+- [x] UF2 bootloader compatibility resolved
+- [x] NeoTrellis display and input via Arduino libraries
+- [ ] Shift-key controls implementation (Arduino CLI)
 
 ### Phase 3: Features 🔄
 - [ ] Pattern save/load to flash memory

@@ -1,347 +1,241 @@
-# NeoTrellis M4 MIDI over USB Support - Implementation Workplan
+# Shift-Key Control Mechanism - Arduino CLI Implementation
+
+## 🔴 CRITICAL ISSUE RESOLVED (2025-09-04)
+
+### ✅ Root Cause Identified
+**The CMake/bossac build system doesn't work reliably with the NeoTrellis M4's UF2 bootloader.**
+
+**Evidence:**
+- Device immediately re-enters bootloader mode after CMake-built firmware is flashed
+- Commit `5d5a883` on feat/midi branch works perfectly using **Arduino CLI**
+- CMake builds produce incompatible firmware for UF2 bootloader
+- Arduino CLI properly handles all UF2 bootloader requirements
+
+### ✅ Solution: Arduino CLI Implementation
+The shift-key functionality will be implemented using Arduino CLI, following the successful pattern from the MIDI branch.
+
+---
 
 ## Project Overview
-
-This workplan documents the implementation of USB MIDI class-compliant support for the NeoTrellis M4 step sequencer. The goal is to enable the sequencer to send and receive MIDI data over USB to control external MIDI instruments and receive MIDI input for synchronization and control.
-
-## Technical Foundation
-
-### Current Architecture
-- **Platform**: NeoTrellis M4 with SAMD51J19A microcontroller
-- **Development**: Arduino CLI with Adafruit SAMD core
-- **Framework**: Arduino with NeoTrellis M4 library
-- **Core Logic**: Existing `StepSequencer` class with platform abstraction
-
-### MIDI Capabilities
-- **USB MIDI Device**: Native USB port supports class-compliant MIDI
-- **Hardware**: 120MHz Cortex-M4F with hardware floating point
-- **Memory**: 512KB flash, 192KB SRAM (sufficient for MIDI buffering)
-- **Limitations**: Device only (not USB host) - can send/receive from computers/tablets
+Implement a shift-key control system for the NeoTrellis M4 step sequencer where:
+- **Shift Key**: Bottom-left key (position [3,0])  
+- **Control Key**: Bottom-right key (position [3,7]) for start/stop functionality
+- When shift is held + control key pressed: start/stop sequencer
+- When shift is not held: normal step sequencer operation
 
 ## Implementation Strategy
 
-### Phase 1: MIDI Abstraction Layer
-Create platform-agnostic MIDI interfaces following the existing architecture patterns.
+### Phase 1: Arduino CLI Project Setup ✅
+**Use the working Arduino project structure** from commit `5d5a883`:
+- Base project: `arduino_trellis/arduino_trellis.ino`
+- Working build/flash process with `arduino-cli`
+- Proper UF2 bootloader compatibility
 
-#### 1.1 MIDI Interface Design
+### Phase 2: Port Shift-Key Logic to Arduino
+**Convert existing CMake implementation** to Arduino sketch:
+
+#### 2.1 Core Shift Controls Class (Arduino Compatible)
 ```cpp
-// Core MIDI abstraction interface
-class IMidiOutput {
-public:
-    virtual ~IMidiOutput() = default;
-    virtual void sendNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) = 0;
-    virtual void sendNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) = 0;
-    virtual void sendControlChange(uint8_t channel, uint8_t control, uint8_t value) = 0;
-    virtual void sendClock() = 0;
-    virtual void sendStart() = 0;
-    virtual void sendStop() = 0;
-    virtual void sendContinue() = 0;
-    virtual bool isConnected() = 0;
-};
-
-class IMidiInput {
-public:
-    virtual ~IMidiInput() = default;
-    virtual void setNoteOnCallback(void (*callback)(uint8_t channel, uint8_t note, uint8_t velocity)) = 0;
-    virtual void setNoteOffCallback(void (*callback)(uint8_t channel, uint8_t note, uint8_t velocity)) = 0;
-    virtual void setControlChangeCallback(void (*callback)(uint8_t channel, uint8_t control, uint8_t value)) = 0;
-    virtual void setClockCallback(void (*callback)()) = 0;
-    virtual void setStartCallback(void (*callback)()) = 0;
-    virtual void setStopCallback(void (*callback)()) = 0;
-    virtual void processMidiInput() = 0;
-};
-```
-
-#### 1.2 Arduino MIDI Implementation
-```cpp
-// Arduino MIDI library wrapper
-class ArduinoMidiOutput : public IMidiOutput {
+// arduino_trellis/ShiftControls.h
+class ShiftControls {
 private:
-    // Using Arduino MIDIUSB library
-};
-
-class ArduinoMidiInput : public IMidiInput {
-private:
-    // MIDI input processing and callback handling
-};
-```
-
-### Phase 2: Arduino Library Integration
-
-#### 2.1 Library Dependencies
-- **MIDIUSB**: Native Arduino library for USB MIDI (built into SAMD core)
-- **Adafruit_NeoTrellis_M4**: Existing hardware abstraction
-- **Dependencies**: No additional external libraries required
-
-#### 2.2 Arduino CLI Setup
-```bash
-# Verify existing setup
-arduino-cli core list | grep adafruit:samd
-arduino-cli lib list | grep "Adafruit NeoTrellis"
-
-# MIDIUSB is built into SAMD core - no additional install needed
-```
-
-### Phase 3: StepSequencer MIDI Integration
-
-#### 3.1 Enhanced StepSequencer Class
-Extend the existing `StepSequencer` to support MIDI output:
-
-```cpp
-class StepSequencer {
+    bool shiftActive_ = false;
+    const uint8_t SHIFT_ROW = 3;
+    const uint8_t SHIFT_COL = 0;
+    const uint8_t CONTROL_ROW = 3; 
+    const uint8_t CONTROL_COL = 7;
+    
 public:
-    struct Dependencies {
-        IClock* clock = nullptr;
-        IMidiOutput* midiOutput = nullptr;  // New dependency
-        IMidiInput* midiInput = nullptr;    // New dependency
-    };
-    
-    // Existing methods...
-    
-    // New MIDI methods
-    void setTrackMidiNote(uint8_t track, uint8_t note);
-    void setTrackMidiChannel(uint8_t track, uint8_t channel);
-    void setMidiSync(bool enabled);
-    
-private:
-    uint8_t trackMidiNotes_[MAX_TRACKS] = {36, 38, 42, 46};  // Kick, snare, hihat, crash
-    uint8_t trackMidiChannels_[MAX_TRACKS] = {10, 10, 10, 10}; // Drum channel
-    bool midiSyncEnabled_ = false;
-    
-    IMidiOutput* midiOutput_;
-    IMidiInput* midiInput_;
-    
-    void sendMidiTriggers();
-    void handleMidiClock();
+    void handleInput(uint8_t row, uint8_t col, bool pressed);
+    bool isShiftActive() const { return shiftActive_; }
+    bool isControlKey(uint8_t row, uint8_t col) const;
+    bool shouldHandleAsShiftControl(uint8_t row, uint8_t col) const;
 };
 ```
 
-#### 3.2 MIDI Trigger Implementation
+#### 2.2 Integration with Arduino Sequencer
+**Main sketch modifications** (`arduino_trellis.ino`):
 ```cpp
-void StepSequencer::sendMidiTriggers() {
-    if (!midiOutput_ || !midiOutput_->isConnected()) return;
-    
-    for (uint8_t track = 0; track < MAX_TRACKS; track++) {
-        if (!trackMutes_[track] && pattern_[track][currentStep_]) {
-            midiOutput_->sendNoteOn(
-                trackMidiChannels_[track],
-                trackMidiNotes_[track], 
-                trackVolumes_[track]
-            );
-            
-            // Schedule note off (typical for drum sounds)
-            // Implementation will use timer or next tick
-        }
-    }
-}
-```
-
-### Phase 4: Arduino Sketch Implementation
-
-#### 4.1 Main Sketch Structure
-```cpp
-// arduino_trellis_midi/arduino_trellis_midi.ino
-#include <MIDIUSB.h>
 #include "Adafruit_NeoTrellis.h"
-#include "StepSequencer.h"  // Port from core/
 
-// MIDI implementations
-ArduinoMidiOutput midiOut;
-ArduinoMidiInput midiIn;
-
-// Hardware
 Adafruit_NeoTrellis trellis;
-
-// Core sequencer with MIDI
-StepSequencer::Dependencies deps = {
-    .midiOutput = &midiOut,
-    .midiInput = &midiIn
-};
-StepSequencer sequencer(deps);
+ShiftControls shiftControls;
+// ... existing sequencer variables ...
 
 void setup() {
     // Existing trellis setup...
+    trellis.begin();
+    trellis.setBrightness(50);
     
-    // MIDI setup
-    midiOut.begin();
-    midiIn.begin();
-    
-    // Configure default MIDI mapping
-    sequencer.setTrackMidiNote(0, 36);  // Kick
-    sequencer.setTrackMidiNote(1, 38);  // Snare  
-    sequencer.setTrackMidiNote(2, 42);  // Closed hihat
-    sequencer.setTrackMidiNote(3, 46);  // Open hihat
-}
-
-void loop() {
-    // Existing sequencer logic...
-    midiIn.processMidiInput();  // Handle incoming MIDI
-    
-    // MIDI clock sync if enabled
-    if (sequencer.isMidiSyncEnabled()) {
-        // Sync to external MIDI clock instead of internal timing
+    // Register button callback with shift control handling
+    for(int i=0; i<NEO_TRELLIS_NUM_KEYS; i++){
+        trellis.registerCallback(i, trellisCallback);
+        trellis.setPixelColor(i, 0);
     }
+    trellis.show();
 }
-```
 
-### Phase 5: Testing and Validation
-
-#### 5.1 Unit Testing Strategy
-```cpp
-// test/test_midi_sequencer.cpp
-#include "catch2/catch.hpp"
-#include "StepSequencer.h"
-#include "mocks/MockMidiOutput.h"
-
-class MockMidiOutput : public IMidiOutput {
-    // Track sent MIDI messages for verification
-    std::vector<MidiMessage> sentMessages;
-};
-
-TEST_CASE("StepSequencer sends MIDI notes on active steps") {
-    MockMidiOutput mockMidi;
-    StepSequencer::Dependencies deps = {.midiOutput = &mockMidi};
-    StepSequencer sequencer(deps);
+TrellisCallback trellisCallback(keyEvent evt) {
+    uint8_t row = evt.bit.NUM / 8;
+    uint8_t col = evt.bit.NUM % 8;
+    bool pressed = evt.bit.EDGE == SEESAW_KEYPAD_EDGE_RISING;
     
-    // Configure pattern and verify MIDI output
-}
-```
-
-#### 5.2 Hardware Testing
-1. **MIDI Monitor**: Use computer MIDI monitor to verify USB MIDI output
-2. **DAW Integration**: Test with Ableton Live, Logic Pro, or similar
-3. **Hardware Synthesizers**: Test with MIDI-compatible drum machines/synths
-4. **Bidirectional Testing**: Send MIDI clock/control to sequencer
-
-### Phase 6: Advanced Features
-
-#### 6.1 MIDI Clock Synchronization
-```cpp
-class MidiClockSync {
-public:
-    void handleMidiClock();
-    void calculateTempo();
-    bool isExternalClockStable();
-private:
-    uint32_t clockTimes_[24];  // 24 clocks per quarter note
-    uint8_t clockIndex_ = 0;
-    uint16_t calculatedBPM_ = 120;
-};
-```
-
-#### 6.2 Pattern Recording from MIDI Input
-```cpp
-void StepSequencer::handleMidiNoteInput(uint8_t channel, uint8_t note, uint8_t velocity) {
-    if (recordMode_) {
-        // Find track matching this MIDI note
-        uint8_t track = findTrackForNote(note);
-        if (track < MAX_TRACKS) {
-            pattern_[track][currentStep_] = true;
-            updateLED(track, currentStep_, true);
+    // Handle shift controls first
+    if (shiftControls.shouldHandleAsShiftControl(row, col)) {
+        shiftControls.handleInput(row, col, pressed);
+        
+        // Check for shift+control combination
+        if (shiftControls.isShiftActive() && 
+            shiftControls.isControlKey(row, col) && pressed) {
+            togglePlayback();  // Start/stop sequencer
+            return 0;
         }
+        
+        // Update visual feedback for shift mode
+        updateShiftVisualFeedback();
+        return 0;
     }
+    
+    // Normal step sequencer input
+    if (pressed && row < 4 && col < 8) {
+        toggleStep(row, col);
+    }
+    
+    return 0;
 }
 ```
 
-#### 6.3 MIDI Control Surface
-- **CC mapping**: Map continuous controllers to tempo, track volume, swing
-- **Program changes**: Switch between pattern banks
-- **System exclusive**: Custom configuration messages
+### Phase 3: Visual Feedback Implementation
+**LED color scheme for shift mode**:
+```cpp
+void updateShiftVisualFeedback() {
+    if (shiftControls.isShiftActive()) {
+        // Highlight shift key in white
+        trellis.setPixelColor(24, 0x404040);  // Bottom-left (dim white)
+        
+        // Highlight control keys in yellow when shift active
+        trellis.setPixelColor(31, 0x404000);  // Bottom-right (dim yellow)
+    } else {
+        // Normal step sequencer colors
+        updateNormalDisplay();
+    }
+    trellis.show();
+}
+```
+
+### Phase 4: Testing and Validation
+
+#### 4.1 Arduino CLI Build Process
+```bash
+# Navigate to Arduino project
+cd arduino_trellis
+
+# Compile
+arduino-cli compile --fqbn adafruit:samd:adafruit_trellis_m4 arduino_trellis
+
+# Flash to device (device must be in bootloader mode)
+arduino-cli upload --fqbn adafruit:samd:adafruit_trellis_m4 -p /dev/cu.usbmodem11101 arduino_trellis
+```
+
+#### 4.2 Hardware Testing
+1. **Shift Key Detection**: Verify bottom-left key activates shift mode
+2. **Start/Stop Control**: Test shift + bottom-right key toggles playback  
+3. **Visual Feedback**: Confirm LED feedback for shift mode
+4. **Normal Operation**: Ensure no interference with step sequencer
+5. **Real-time Performance**: Verify responsive button handling
+
+### Phase 5: Keep CMake for Simulation
+**Maintain CMake build for development**:
+- Host simulation with shift controls for testing
+- Unit tests for shift control logic
+- Cross-platform development without hardware
+
+## File Structure
+```
+arduino_trellis/
+├── arduino_trellis.ino       # Main Arduino sketch
+├── ShiftControls.h           # Shift control logic (header-only)
+└── build/                    # Arduino CLI build artifacts
+
+src/core/                     # CMake simulation only
+├── ShiftControls.cpp         # For unit tests and simulation
+└── IShiftControls.h          # Interface for testing
+
+src/simulation/
+└── main.cpp                  # Simulation with shift controls
+```
+
+## Success Criteria
+- [x] Arduino CLI project structure established
+- [x] **Reliable flash/upload process using Arduino CLI** ✅
+- [x] **Makefile fixed to use Arduino CLI for hardware deployment** ✅
+- [x] **CMake simulation environment preserved for development** ✅
+- [ ] Shift key detection works on hardware
+- [ ] Start/stop control with shift modifier functional  
+- [ ] Visual feedback implemented
+- [ ] No interference with normal step sequencer
+
+## Technical Advantages of Arduino CLI Approach
+
+### Hardware Compatibility
+- **UF2 Bootloader**: Fully compatible with NeoTrellis M4
+- **Library Ecosystem**: Access to official Adafruit libraries
+- **Proven Reliability**: Arduino framework handles hardware initialization
+- **No Custom Firmware**: Uses established Arduino infrastructure
+
+### Development Workflow  
+- **Simple Build**: `arduino-cli compile` 
+- **Reliable Flash**: `arduino-cli upload` with auto-reset
+- **Cross-platform**: Works on macOS/Linux/Windows
+- **Professional Tools**: Command-line automation capability
+
+### Performance
+- **Optimized**: Arduino compiler optimizations for SAMD51
+- **Memory Efficient**: Proven memory layouts for this hardware
+- **Real-time**: Stable timing for step sequencer applications
+- **Battle-tested**: Used by thousands of NeoTrellis M4 projects
+
+## Migration Benefits
+
+### Preserved Architecture  
+- **Core Logic**: Shift control algorithms remain unchanged
+- **Testing**: Unit tests still valuable via CMake simulation
+- **Interfaces**: Clean abstraction concepts maintained
+- **Documentation**: All design decisions preserved
+
+### Reduced Complexity
+- **No Custom Linker Scripts**: Arduino handles memory layout
+- **No Bootloader Fighting**: UF2 compatibility built-in  
+- **No Register-level Code**: High-level Arduino APIs
+- **No Debugging Infrastructure**: Serial debugging just works
 
 ## Implementation Timeline
 
-### Week 1: Foundation
-- [ ] Design and implement MIDI abstraction interfaces
-- [ ] Create Arduino MIDI wrapper classes
-- [ ] Unit tests for MIDI interfaces
+### Immediate (Day 1)
+- [x] Identify Arduino CLI as solution
+- [x] **Fix Makefile to use Arduino CLI for hardware deployment** ✅
+- [x] **Verify reliable flash process works** ✅
+- [ ] Create new Arduino sketch based on working commit
+- [ ] Port shift control logic to Arduino-compatible format
 
-### Week 2: Integration  
-- [ ] Extend StepSequencer with MIDI dependencies
-- [ ] Implement MIDI trigger output
-- [ ] Basic Arduino sketch with MIDI output
+### Short-term (Week 1)  
+- [ ] Implement shift key detection in Arduino sketch
+- [ ] Add start/stop control with visual feedback
+- [ ] Test complete functionality on hardware
+- [ ] Verify no regression in step sequencer operation
 
-### Week 3: Testing and Polish
-- [ ] Comprehensive testing with MIDI hardware/software
-- [ ] MIDI input processing and clock sync
-- [ ] Documentation and examples
-
-### Week 4: Advanced Features
-- [ ] Pattern recording from MIDI input
-- [ ] MIDI control surface mapping
-- [ ] Performance optimization
-
-## Technical Considerations
-
-### Memory Management
-- **MIDI Buffer Size**: 64-byte ring buffer for incoming MIDI (sufficient for real-time)
-- **Static Allocation**: No dynamic memory allocation in MIDI paths
-- **Flash Usage**: Estimate +5KB for MIDI code (well within 512KB capacity)
-
-### Real-time Performance
-- **MIDI Latency**: Target <1ms latency for note triggers
-- **USB Polling**: 1kHz USB polling rate on SAMD51
-- **Interrupt Priority**: MIDI processing in main loop, not ISR
-
-### Error Handling
-```cpp
-// Robust error handling for MIDI operations
-if (!midiOutput_->isConnected()) {
-    // Graceful degradation - continue sequencer without MIDI
-    return;
-}
-
-try {
-    midiOutput_->sendNoteOn(channel, note, velocity);
-} catch (const MidiException& e) {
-    // Log error but don't crash sequencer
-    debugSerial.printf("MIDI error: %s\n", e.what());
-}
-```
-
-### Power Management
-- **USB Suspend**: Handle USB sleep/wake states
-- **MIDI Keep-alive**: Send active sensing messages to maintain connections
-
-## Success Criteria
-
-### Minimum Viable Product (MVP)
-1. ✅ **USB MIDI Output**: Send note on/off for each sequencer step
-2. ✅ **Class Compliance**: Works with standard MIDI software/hardware  
-3. ✅ **Real-time Performance**: No noticeable latency or timing jitter
-4. ✅ **Integration**: MIDI functionality doesn't interfere with existing sequencer
-
-### Full Feature Set
-1. ✅ **Bidirectional MIDI**: Send and receive MIDI data
-2. ✅ **Clock Synchronization**: Sync to external MIDI clock
-3. ✅ **Pattern Recording**: Record patterns from MIDI input
-4. ✅ **Control Surface**: Map CCs to sequencer parameters
-5. ✅ **Multiple Channels**: Support different MIDI channels per track
-
-## Risk Mitigation
-
-### Technical Risks
-- **USB Compatibility**: Test with multiple operating systems and MIDI hosts
-- **Timing Accuracy**: Verify MIDI clock precision meets professional standards  
-- **Memory Constraints**: Monitor RAM usage, especially with MIDI buffering
-- **Arduino Library Dependencies**: Ensure stable, maintained libraries
-
-### Development Risks
-- **Scope Creep**: Implement MVP first, add features incrementally
-- **Testing Complexity**: Invest in proper test infrastructure early
-- **Hardware Availability**: Test with multiple MIDI devices/software
-
-## Future Enhancements
-
-### Long-term Vision
-1. **MIDI 2.0 Support**: When Arduino libraries support MIDI 2.0
-2. **Wireless MIDI**: WiFi or Bluetooth MIDI for wireless operation
-3. **Multi-device Sync**: Chain multiple NeoTrellis M4 units
-4. **Advanced Sequencing**: Polyrhythms, probability, generative patterns
-
-The architecture's modular design enables these future enhancements while maintaining backward compatibility with the current implementation.
+### Maintenance
+- [ ] Keep CMake simulation for development/testing
+- [ ] Maintain unit test coverage via simulation build
+- [ ] Document Arduino CLI workflow for future development
 
 ## Conclusion
 
-This workplan leverages the existing Arduino CLI infrastructure and clean architecture to add professional-grade MIDI capabilities to the NeoTrellis M4 step sequencer. The approach prioritizes reliability, real-time performance, and maintainability while enabling both basic MIDI output and advanced synchronization features.
+The Arduino CLI approach leverages the existing working infrastructure while providing a reliable path to implement shift-key controls on the NeoTrellis M4 hardware. This solution prioritizes:
 
-The implementation follows the project's established patterns of dependency injection, platform abstraction, and comprehensive testing, ensuring the MIDI functionality integrates seamlessly with the existing codebase.
+1. **Hardware Compatibility**: Proven Arduino ecosystem
+2. **Development Velocity**: Fast iteration with reliable builds  
+3. **Architecture Preservation**: Core logic and testing maintained
+4. **Future Maintainability**: Standard Arduino development patterns
+
+The CMake implementation provided valuable architecture and testing infrastructure that remains useful for simulation and development, while Arduino CLI enables reliable hardware deployment.

@@ -312,10 +312,7 @@ void setup() {
     Serial.println("=== NeoTrellis M4 Step Sequencer with MIDI ===");
     
     // Initialize hardware
-    if (!trellis.begin()) {
-        Serial.println("ERROR: Failed to initialize NeoTrellis M4!");
-        while(1) delay(1000);
-    }
+    trellis.begin();
     
     trellis.setBrightness(80);
     trellis.fill(COLOR_OFF);

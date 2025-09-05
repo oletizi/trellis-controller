@@ -11,8 +11,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 11)
 
-# Option to build simulation instead of embedded target
+# Build options (mutually exclusive)
 option(BUILD_SIMULATION "Build simulation for host platform instead of embedded target" OFF)
+option(BUILD_TESTS "Build unit tests for host platform" OFF)
 
 # Core business logic sources (platform-agnostic)
 set(CORE_SOURCES
@@ -20,7 +21,59 @@ set(CORE_SOURCES
     ${CMAKE_SOURCE_DIR}/src/core/ShiftControls.cpp
 )
 
-if(BUILD_SIMULATION)
+if(BUILD_TESTS)
+    # ==================== TEST BUILD ====================
+    message(STATUS "Building unit tests for host platform")
+    
+    # Enable testing
+    enable_testing()
+    
+    # Compiler flags for coverage and debugging
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -g --coverage")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -g --coverage")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+    
+    # Include directories
+    include_directories(
+        ${CMAKE_SOURCE_DIR}/include/core
+        ${CMAKE_SOURCE_DIR}/test
+    )
+    
+    # Test sources
+    file(GLOB_RECURSE TEST_SOURCES 
+        ${CMAKE_SOURCE_DIR}/test/*.cpp
+    )
+    
+    # Find Catch2
+    find_package(Catch2 3 REQUIRED)
+    
+    # Create test executable
+    add_executable(run_tests ${TEST_SOURCES} ${CORE_SOURCES})
+    
+    # Link with Catch2
+    target_link_libraries(run_tests PRIVATE Catch2::Catch2WithMain)
+    
+    # Add test target
+    add_test(NAME UnitTests COMMAND run_tests)
+    
+    # Coverage targets
+    add_custom_target(coverage
+        COMMAND lcov --directory . --capture --output-file coverage.info
+        COMMAND lcov --remove coverage.info '/usr/*' '${CMAKE_SOURCE_DIR}/test/*' --output-file coverage.info
+        COMMAND genhtml coverage.info --output-directory coverage_html
+        DEPENDS run_tests
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        COMMENT "Generating coverage report"
+    )
+    
+    add_custom_target(coverage-clean
+        COMMAND find ${CMAKE_BINARY_DIR} -name "*.gcda" -delete
+        COMMAND find ${CMAKE_BINARY_DIR} -name "*.gcno" -delete
+        COMMAND rm -rf ${CMAKE_BINARY_DIR}/coverage.info ${CMAKE_BINARY_DIR}/coverage_html
+        COMMENT "Cleaning coverage data"
+    )
+
+elseif(BUILD_SIMULATION)
     # ==================== SIMULATION BUILD ====================
     message(STATUS "Building simulation for host platform")
     

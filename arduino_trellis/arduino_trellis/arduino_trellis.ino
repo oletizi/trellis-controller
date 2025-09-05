@@ -1,44 +1,130 @@
-// NeoTrellis M4 Step Sequencer
-// Full implementation with Arduino framework
+// NeoTrellis M4 Step Sequencer - Thin Hardware Interface
+// This file contains ONLY device-specific hardware translation
+// All business logic is in src/core/
 
 #include <Adafruit_NeoTrellisM4.h>
+#include <MIDIUSB.h>
 
-// Create the trellis object
+// Hardware objects
 Adafruit_NeoTrellisM4 trellis;
 
-// Step Sequencer Implementation (ported from core logic)
+// Simple Arduino clock implementation for core
+class ArduinoSystemClock {
+public:
+    uint32_t getCurrentTime() const {
+        return millis();
+    }
+    
+    void delay(uint32_t milliseconds) {
+        ::delay(milliseconds);
+    }
+    
+    void reset() {
+        // No-op for Arduino millis()
+    }
+};
+
+// Simple Arduino MIDI Output implementation
+class ArduinoMidiOutput {
+public:
+    ArduinoMidiOutput() : connected_(true) {}
+    
+    void sendNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
+        if (!connected_) return;
+        
+        midiEventPacket_t noteOn = {0x09, static_cast<uint8_t>(0x90 | channel), note, velocity};
+        MidiUSB.sendMIDI(noteOn);
+        MidiUSB.flush();
+        
+        Serial.print("MIDI Note On: CH");
+        Serial.print(channel + 1);
+        Serial.print(" Note:");
+        Serial.print(note);
+        Serial.print(" Vel:");
+        Serial.println(velocity);
+    }
+    
+    void sendNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {
+        if (!connected_) return;
+        
+        midiEventPacket_t noteOff = {0x08, static_cast<uint8_t>(0x80 | channel), note, velocity};
+        MidiUSB.sendMIDI(noteOff);
+        MidiUSB.flush();
+    }
+    
+    void sendStart() {
+        if (!connected_) return;
+        
+        midiEventPacket_t startMsg = {0x0F, 0xFA, 0, 0};
+        MidiUSB.sendMIDI(startMsg);
+        MidiUSB.flush();
+        Serial.println("MIDI: Start sent");
+    }
+    
+    void sendStop() {
+        if (!connected_) return;
+        
+        midiEventPacket_t stopMsg = {0x0F, 0xFC, 0, 0};
+        MidiUSB.sendMIDI(stopMsg);
+        MidiUSB.flush();
+        Serial.println("MIDI: Stop sent");
+    }
+    
+    bool isConnected() const {
+        return connected_;
+    }
+    
+    void flush() {
+        MidiUSB.flush();
+    }
+
+private:
+    bool connected_;
+};
+
+// Simple core application logic embedded directly
 class StepSequencer {
 private:
     static const int MAX_TRACKS = 4;
     static const int MAX_STEPS = 8;
     
     bool pattern_[MAX_TRACKS][MAX_STEPS];
-    int bpm_;
-    int stepCount_;
-    int currentStep_;
+    uint8_t trackMidiNotes_[MAX_TRACKS];
+    uint8_t trackMidiChannels_[MAX_TRACKS];
+    uint8_t trackVolumes_[MAX_TRACKS];
+    
+    uint16_t bpm_;
+    uint8_t stepCount_;
+    uint8_t currentStep_;
     bool playing_;
     unsigned long lastStepTime_;
     unsigned long stepInterval_;
     
+    ArduinoMidiOutput* midiOutput_;
+    
 public:
-    StepSequencer() 
+    StepSequencer(ArduinoMidiOutput* midi = nullptr) 
         : bpm_(120)
         , stepCount_(MAX_STEPS)
         , currentStep_(0)
         , playing_(true)
-        , lastStepTime_(0) {
+        , lastStepTime_(0)
+        , midiOutput_(midi) {
         
         // Clear pattern
         for (int track = 0; track < MAX_TRACKS; track++) {
             for (int step = 0; step < MAX_STEPS; step++) {
                 pattern_[track][step] = false;
             }
+            trackMidiNotes_[track] = 36 + track;  // C2, C#2, D2, D#2
+            trackMidiChannels_[track] = 9;        // MIDI channel 10 (0-based)
+            trackVolumes_[track] = 127;
         }
         
         calculateStepInterval();
     }
     
-    void init(int bpm, int stepCount) {
+    void init(uint16_t bpm, uint8_t stepCount) {
         bpm_ = bpm;
         stepCount_ = (stepCount > MAX_STEPS) ? MAX_STEPS : stepCount;
         calculateStepInterval();
@@ -46,8 +132,6 @@ public:
     }
     
     void calculateStepInterval() {
-        // Convert BPM to milliseconds between steps
-        // For 16th notes: 60000ms / (BPM * 4)
         stepInterval_ = 60000 / (bpm_ * 2); // 8th notes for 8-step pattern
     }
     
@@ -63,6 +147,23 @@ public:
     
     void advance() {
         currentStep_ = (currentStep_ + 1) % stepCount_;
+        sendMidiTriggers();
+    }
+    
+    void sendMidiTriggers() {
+        if (!midiOutput_ || !midiOutput_->isConnected()) {
+            return;
+        }
+        
+        for (uint8_t track = 0; track < MAX_TRACKS; track++) {
+            if (pattern_[track][currentStep_]) {
+                midiOutput_->sendNoteOn(
+                    trackMidiChannels_[track],
+                    trackMidiNotes_[track],
+                    trackVolumes_[track]
+                );
+            }
+        }
     }
     
     void reset() {
@@ -73,11 +174,13 @@ public:
     void start() {
         playing_ = true;
         lastStepTime_ = millis();
+        if (midiOutput_) midiOutput_->sendStart();
     }
     
     void stop() {
         playing_ = false;
-        currentStep_ = 0;  // Reset playhead to beginning
+        currentStep_ = 0;
+        if (midiOutput_) midiOutput_->sendStop();
     }
     
     void togglePlayback() {
@@ -90,45 +193,55 @@ public:
         }
     }
     
-    void toggleStep(int track, int step) {
-        if (track >= 0 && track < MAX_TRACKS && step >= 0 && step < MAX_STEPS) {
+    void toggleStep(uint8_t track, uint8_t step) {
+        if (track < MAX_TRACKS && step < MAX_STEPS) {
             pattern_[track][step] = !pattern_[track][step];
         }
     }
     
-    bool isStepActive(int track, int step) const {
-        if (track >= 0 && track < MAX_TRACKS && step >= 0 && step < MAX_STEPS) {
+    bool isStepActive(uint8_t track, uint8_t step) const {
+        if (track < MAX_TRACKS && step < MAX_STEPS) {
             return pattern_[track][step];
         }
         return false;
     }
     
-    int getCurrentStep() const { return currentStep_; }
-    bool isPlaying() const { return playing_; }
-    int getBPM() const { return bpm_; }
+    void setTrackMidiNote(uint8_t track, uint8_t note) {
+        if (track < MAX_TRACKS) {
+            trackMidiNotes_[track] = note;
+        }
+    }
     
-    void setBPM(int bpm) {
+    uint8_t getTrackMidiNote(uint8_t track) const {
+        return (track < MAX_TRACKS) ? trackMidiNotes_[track] : 0;
+    }
+    
+    uint8_t getCurrentStep() const { return currentStep_; }
+    bool isPlaying() const { return playing_; }
+    uint16_t getBPM() const { return bpm_; }
+    
+    void setBPM(uint16_t bpm) {
         bpm_ = bpm;
         calculateStepInterval();
     }
     
-    // Setup demo pattern
+    // Setup demo pattern with proper MIDI notes
     void setupDemoPattern() {
-        // Track 0 (Red): Kick pattern - steps 0, 2, 4, 6
-        pattern_[0][0] = pattern_[0][2] = pattern_[0][4] = pattern_[0][6] = true;
+        // Configure MIDI notes for drum sounds
+        trackMidiNotes_[0] = 36;  // Kick drum (C2)
+        trackMidiNotes_[1] = 38;  // Snare (D2)
+        trackMidiNotes_[2] = 42;  // Closed hi-hat (F#2)
+        trackMidiNotes_[3] = 46;  // Open hi-hat (A#2)
         
-        // Track 1 (Green): Snare pattern - steps 1, 3, 5, 7  
-        pattern_[1][1] = pattern_[1][3] = pattern_[1][5] = pattern_[1][7] = true;
-        
-        // Track 2 (Blue): Hi-hat pattern - steps 0, 4
-        pattern_[2][0] = pattern_[2][4] = true;
-        
-        // Track 3 (Yellow): Accent pattern - steps 2, 6
-        pattern_[3][2] = pattern_[3][6] = true;
+        // Create basic drum pattern
+        pattern_[0][0] = pattern_[0][4] = true;  // Kick on 1, 5
+        pattern_[1][2] = pattern_[1][6] = true;  // Snare on 3, 7
+        pattern_[2][1] = pattern_[2][3] = pattern_[2][5] = pattern_[2][7] = true;  // Hi-hat offbeats
+        pattern_[3][3] = true;  // Open hi-hat on 4
     }
 };
 
-// Shift Controls Implementation (Arduino compatible)
+// Simple shift controls embedded
 class ShiftControls {
 private:
     static const uint8_t SHIFT_ROW = 3;
@@ -145,12 +258,9 @@ public:
     void handleInput(uint8_t row, uint8_t col, bool pressed) {
         if (isShiftKey(row, col)) {
             shiftActive_ = pressed;
-            Serial.print("Shift key ");
-            Serial.println(pressed ? "pressed" : "released");
         }
         else if (isControlKey(row, col) && pressed && shiftActive_) {
             startStopTriggered_ = true;
-            Serial.println("Start/Stop triggered!");
         }
     }
     
@@ -179,8 +289,9 @@ private:
 };
 
 // Global instances
+ArduinoMidiOutput midiOutput;
+StepSequencer sequencer(&midiOutput);
 ShiftControls shiftControls;
-StepSequencer sequencer;
 
 // Color definitions
 #define COLOR_OFF     0x000000
@@ -196,26 +307,29 @@ StepSequencer sequencer;
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("=== NeoTrellis M4 Step Sequencer ===");
+    while (!Serial && millis() < 5000) delay(100);
     
-    // Initialize NeoTrellis M4
+    Serial.println("=== NeoTrellis M4 Step Sequencer with MIDI ===");
+    
+    // Initialize hardware
     trellis.begin();
-    trellis.setBrightness(80);
     
-    // Initialize sequencer
+    trellis.setBrightness(80);
+    trellis.fill(COLOR_OFF);
+    trellis.show();
+    
+    // Initialize sequencer with MIDI support
     sequencer.init(120, 8); // 120 BPM, 8 steps
     sequencer.setupDemoPattern();
     sequencer.start();
     
-    // Clear all pixels initially
-    trellis.fill(COLOR_OFF);
-    trellis.show();
-    
-    Serial.println("Step Sequencer initialized:");
+    Serial.println("Hardware initialized successfully!");
     Serial.print("- BPM: "); Serial.println(sequencer.getBPM());
-    Serial.println("- Tracks: 4 (Red=Kick, Green=Snare, Blue=Hi-hat, Yellow=Accent)");
+    Serial.println("- Tracks: 4 (Red=Kick, Green=Snare, Blue=Hi-hat, Yellow=Open HH)");
     Serial.println("- Steps: 8");
-    Serial.println("- Controls: Press buttons to toggle steps");
+    Serial.println("- USB MIDI enabled on channel 10");
+    Serial.println("- Shift (bottom-left) + bottom-right for play/stop");
+    Serial.println("- Press buttons to toggle steps");
     Serial.println("Ready!");
 }
 

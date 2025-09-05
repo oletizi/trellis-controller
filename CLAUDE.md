@@ -22,11 +22,38 @@ This is a sophisticated embedded C++ project implementing a step sequencer for t
 class IDisplay;     // LED/display abstraction
 class IInput;       // Button/input abstraction  
 class IClock;       // Timing abstraction
+class IMidiOutput;  // MIDI output abstraction
+class IMidiInput;   // MIDI input abstraction
 
 // Platform implementations
 CursesDisplay;      // Terminal-based simulation
 NeoTrellisDisplay;  // Hardware RGB LEDs
+ArduinoMidiOutput;  // Hardware USB MIDI
 ```
+
+### Arduino Platform Guidelines
+**CRITICAL**: Arduino `.ino` files must remain as thin as possible and contain ONLY device-specific translation code:
+
+#### ✅ Allowed in Arduino .ino files:
+- Hardware initialization (`trellis.begin()`, pin setup)
+- Device-specific I/O translation (button indices → row/col)
+- Platform-specific library includes (`<Adafruit_NeoTrellisM4.h>`, `<MIDIUSB.h>`)
+- Simple data format conversion (uint32_t colors, MIDI message bytes)
+- Hardware-specific timing constraints
+
+#### ❌ NEVER allowed in Arduino .ino files:
+- **Business logic** (sequencer patterns, BPM calculations, step advancement)
+- **Application state** (pattern storage, current step, playing state)
+- **MIDI logic** (note mapping, velocity calculations, timing)
+- **Control flow** (start/stop logic, step sequencing)
+- **Feature implementation** (shift controls, pattern editing)
+
+#### Single Arduino File Rule
+**MANDATORY**: Maintain exactly ONE Arduino `.ino` file per hardware target:
+- **ONE** `arduino_trellis.ino` for NeoTrellis M4
+- **NO** separate files for different features (MIDI, basic, etc.)
+- Feature support controlled by dependency injection in core code
+- Arduino file only provides hardware interface implementations
 
 ### Error Handling Philosophy
 **CRITICAL**: Never implement fallbacks or mock data outside test code:
@@ -332,6 +359,9 @@ try {
 
 ❌ **NEVER implement fallbacks or mock data** outside test code - throw descriptive errors instead  
 ❌ **NEVER tie business logic to specific platforms** - use platform abstraction  
+❌ **NEVER put application logic in Arduino .ino files** - keep them thin, device-specific only  
+❌ **NEVER create multiple .ino files for features** - use dependency injection instead  
+❌ **NEVER duplicate core logic across platforms** - write once in `/src/core/`  
 ❌ **NEVER use dynamic allocation** in real-time paths  
 ❌ **NEVER comment out CMake targets** - use conditional compilation  
 ❌ **NEVER ignore the dependency injection pattern**  

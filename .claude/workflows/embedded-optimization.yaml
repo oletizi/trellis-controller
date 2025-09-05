@@ -1,0 +1,94 @@
+name: embedded-optimization
+description: Optimize embedded performance and resource usage
+version: 1.0.0
+
+agents:
+  - performance-engineer
+  - embedded-systems
+  - cpp-pro
+  - debugger
+
+phases:
+  - name: resource-profiling
+    description: Profile current resource usage
+    agents:
+      - performance-engineer
+      - embedded-systems
+    steps:
+      - Measure flash memory usage vs 512KB limit
+      - Profile RAM usage vs 192KB limit
+      - Analyze stack usage patterns
+      - Monitor CPU utilization at 120MHz
+
+  - name: timing-analysis
+    description: Analyze real-time performance
+    agents:
+      - performance-engineer
+      - embedded-systems
+    steps:
+      - Measure sequencer timing precision
+      - Profile button scan latency
+      - Analyze LED refresh rates
+      - Monitor I2C transaction timing
+
+  - name: memory-optimization
+    description: Optimize memory usage patterns
+    agents:
+      - cpp-pro
+      - embedded-systems
+    steps:
+      - Eliminate dynamic allocations in real-time paths
+      - Optimize data structure sizes
+      - Implement memory pool patterns if needed
+      - Reduce static memory footprint
+
+  - name: performance-optimization
+    description: Optimize CPU-intensive operations
+    agents:
+      - cpp-pro
+      - performance-engineer
+    steps:
+      - Optimize LED color calculations
+      - Improve button debouncing algorithms
+      - Use ARM Cortex-M4F FPU effectively
+      - Implement SIMD optimizations where applicable
+
+  - name: interrupt-optimization
+    description: Optimize interrupt handling
+    agents:
+      - embedded-systems
+      - performance-engineer
+    steps:
+      - Minimize interrupt handler execution time
+      - Implement lock-free data structures
+      - Optimize I2C interrupt handling
+      - Reduce interrupt latency
+
+  - name: power-optimization
+    description: Optimize power consumption
+    agents:
+      - embedded-systems
+    steps:
+      - Implement sleep modes during idle periods
+      - Optimize LED brightness for power efficiency
+      - Reduce CPU clock when possible
+      - Minimize I2C communication overhead
+
+  - name: validation
+    description: Validate optimizations
+    agents:
+      - debugger
+      - performance-engineer
+    steps:
+      - Measure performance improvements
+      - Verify functionality preserved
+      - Test edge cases and stress conditions
+      - Validate long-term stability
+
+success_criteria:
+  - Memory usage well within SAMD51 limits
+  - Real-time constraints consistently met
+  - Power consumption optimized
+  - No performance regressions
+  - Deterministic behavior maintained
+  - Stable operation under load

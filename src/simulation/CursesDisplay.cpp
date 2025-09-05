@@ -37,10 +37,10 @@ void CursesDisplay::init() {
     getmaxyx(stdscr, std::ignore, termWidth);
     
     // LED display window (main area)
-    ledWindow_ = newwin(ROWS * 2 + 2, COLS * 4 + 2, 2, 2);
+    ledWindow_ = newwin(ROWS * 2 + 2, COLS * 4 + 2, 4, 2);
     
     // Info window (bottom)
-    infoWindow_ = newwin(6, termWidth - 4, ROWS * 2 + 6, 2);
+    infoWindow_ = newwin(6, termWidth - 4, ROWS * 2 + 8, 2);
     
     // Draw borders
     box(ledWindow_, 0, 0);
@@ -49,6 +49,10 @@ void CursesDisplay::init() {
     // Title and instructions
     mvprintw(0, 2, "NeoTrellis M4 Step Sequencer Simulator - 4x8 Grid");
     mvprintw(1, 2, "Step Sequencer: RED=Track0, GREEN=Track1, BLUE=Track2, YELLOW=Track3 | Press ESC to quit");
+    
+    // Shift-key control legend
+    mvprintw(2, 2, "SHIFT CONTROLS: [Hold Z] + [,] = Start/Stop | Shift key = [Z] (bottom-left) | Play/Stop key = [,] (bottom-right)");
+    mvprintw(3, 2, "When stopped, playhead resets to beginning (position 0)");
     
     initialized_ = true;
     drawGrid();

@@ -1,34 +1,43 @@
-# Claude AI Agent Guidelines for Trellis Controller
+# Trellis Controller - Advanced Multi-Platform C++ Sequencer
 
-This document provides guidelines for AI agents (including Claude Code) working on the Trellis Controller project. It ensures consistency with the project's architectural principles, quality standards, and development patterns.
+## Project Overview
+This is a sophisticated embedded C++ project implementing a step sequencer for the NeoTrellis M4 with a **multi-platform architecture**. The project features complete hardware abstraction, dependency injection patterns, and dual build targets (embedded + simulation) using modern C++17 practices.
 
-## Overview
-
-Trellis Controller is an embedded C++ application framework for the AdaFruit NeoTrellis M4 platform focused on:
-
+**Key Features:**
 - C++ firmware for SAMD51 microcontrollers
-- Step sequencer and musical instrument applications
+- Step sequencer and musical instrument applications  
 - Real-time button/LED interaction via I2C/Seesaw protocol
-- CMake-based cross-compilation for ARM Cortex-M4
+- Dual build system: Arduino CLI + CMake
+- Complete platform abstraction with simulation capability
 - Audio synthesis and MIDI output capabilities
 - Pattern-based music sequencing
 
-## Core Requirements
+## Architecture Principles
 
-### Error Handling
-
-- **Never implement fallbacks or use mock data outside of test code**
-- **Throw errors with descriptive messages** instead of fallbacks
-- Errors let us know that something isn't implemented
-- Fallbacks and mock data are bug factories
+### Platform Abstraction Architecture
+**Critical**: This project uses rigorous platform abstraction with **zero business logic tied to specific platforms**:
 
 ```cpp
-// ✅ GOOD: Throw descriptive errors
+// Core interfaces (platform-agnostic)
+class IDisplay;     // LED/display abstraction
+class IInput;       // Button/input abstraction  
+class IClock;       // Timing abstraction
+
+// Platform implementations
+CursesDisplay;      // Terminal-based simulation
+NeoTrellisDisplay;  // Hardware RGB LEDs
+```
+
+### Error Handling Philosophy
+**CRITICAL**: Never implement fallbacks or mock data outside test code:
+
+```cpp
+// ✅ CORRECT: Throw descriptive errors
 if (!trellis.begin()) {
-    throw std::runtime_error("Failed to initialize NeoTrellis hardware");
+    throw std::runtime_error("Failed to initialize NeoTrellis hardware: check I2C connections");
 }
 
-// ❌ BAD: Using fallbacks
+// ❌ WRONG: Using fallbacks
 bool trellisReady = trellis.begin() || simulateHardware();
 ```
 
@@ -38,16 +47,18 @@ bool trellisReady = trellis.begin() || simulateHardware();
 - **RAII for resource management** - no manual memory management
 - **Const correctness** - use const wherever possible
 - **No dynamic allocation in real-time paths**
+- **Template metaprogramming** for zero-overhead abstractions
+- **No exceptions** in embedded builds (`-fno-exceptions`)
+- **No RTTI** (`-fno-rtti`)
 - All code must be testable via dependency injection
 
-### File Size Limits
-
-- **Code files should be no larger than 300-500 lines**
-- Anything larger should be refactored for readability and modularity
-- Split large files into smaller, focused modules
+### File Organization
+- **300-500 line maximum** per file
+- **Platform-specific code** isolated to implementation directories
+- **Interfaces in `/include/core/`**
+- **Business logic in `/src/core/`**
 
 ### Repository Hygiene
-
 - **Build artifacts ONLY in `build/` directory** (configured in .gitignore)
 - NO temporary scripts, logs, or generated files committed to git
 - **Never bypass pre-commit or pre-push hooks** - fix issues instead
@@ -56,90 +67,146 @@ bool trellisReady = trellis.begin() || simulateHardware();
 ## Implementation Patterns
 
 ### Dependency Injection Pattern
+**Mandatory pattern** throughout the codebase:
 
 ```cpp
-// Good: Constructor injection with interfaces
-class StepSequencer {
-public:
-    struct Dependencies {
-        IClock* clock = nullptr;
-        IAudioOutput* audio = nullptr;
-        IMidiOutput* midi = nullptr;
-    };
-    
-    explicit StepSequencer(Dependencies deps = {})
-        : clock_(deps.clock ? deps.clock : &defaultClock_)
-        , audio_(deps.audio ? deps.audio : &defaultAudio_)
-        , midi_(deps.midi ? deps.midi : &defaultMidi_) {
-    }
-    
-private:
-    IClock* clock_;
-    IAudioOutput* audio_;
-    IMidiOutput* midi_;
-    
-    // Default implementations
-    static SystemClock defaultClock_;
-    static NullAudioOutput defaultAudio_;
-    static NullMidiOutput defaultMidi_;
+// All classes accept dependencies via constructor
+struct Dependencies {
+    IClock* clock = nullptr;
+    IAudioOutput* audio = nullptr;
+    IMidiOutput* midi = nullptr;
+};
+
+StepSequencer sequencer(Dependencies{&customClock, &audioOut});
+```
+
+### Dependency Injection in Practice
+```cpp
+// Application setup (platform-specific)
+auto display = std::make_unique<NeoTrellisDisplay>();  // or CursesDisplay
+auto input = std::make_unique<NeoTrellisInput>();      // or CursesInput
+
+StepSequencer::Dependencies deps{
+    .display = display.get(),
+    .input = input.get()
+};
+
+auto sequencer = std::make_unique<StepSequencer>(deps);
+```
+
+### Hardware Abstraction Implementation
+```cpp
+class NeoTrellisDisplay : public IDisplay {
+    // Concrete hardware implementation
+    void setPixel(uint8_t index, uint32_t color) override;
+    void show() override;
+};
+
+class CursesDisplay : public IDisplay {
+    // Simulation implementation
+    void setPixel(uint8_t index, uint32_t color) override;
+    void show() override;
 };
 ```
 
-### Hardware Abstraction
+## Build System Architecture
 
-```cpp
-// Abstract hardware interface for testing
-class IHardware {
-public:
-    virtual ~IHardware() = default;
-    virtual bool readButton(uint8_t index) = 0;
-    virtual void setLED(uint8_t index, uint32_t color) = 0;
-    virtual void updateDisplay() = 0;
-};
+### Dual Build System
+**Critical Understanding**: This project uses **two complementary build systems**:
 
-// Concrete implementation
-class NeoTrellisHardware : public IHardware {
-    // Actual hardware interaction
-};
+1. **Arduino CLI** (Primary for hardware)
+   - Hardware deployment to NeoTrellis M4
+   - UF2 bootloader integration
+   - Adafruit SAMD core
+   - Native Arduino library ecosystem
 
-// Test implementation
-class MockHardware : public IHardware {
-    // Mock for unit tests
-};
+2. **CMake** (Development & Testing)
+   - Host simulation with ncurses
+   - Unit testing with Catch2
+   - Code coverage analysis
+   - Cross-platform development
+
+### CMake Configuration
+**Key pattern**: Single `CMakeLists.txt` with conditional compilation:
+
+```cmake
+option(BUILD_SIMULATION "Build simulation for host platform" OFF)
+
+if(BUILD_SIMULATION)
+    # Host build with ncurses simulation
+    add_executable(trellis_simulation ${SIMULATION_SOURCES})
+else()
+    # Embedded build for SAMD51
+    add_executable(TrellisStepSequencer.elf ${EMBEDDED_SOURCES})
+endif()
 ```
 
 ## Project Structure
 
 ```text
 trellis-controller/
-├── CMakeLists.txt        # Build configuration
-├── src/                  # Source files
-│   ├── main.cpp         # Application entry point
-│   ├── apps/            # Different applications (sequencer, synth, etc.)
-│   ├── drivers/         # Hardware drivers (NeoTrellis, I2C, etc.)
-│   └── core/            # Core utilities and abstractions
-├── include/             # Header files
-│   ├── apps/            # Application interfaces
-│   ├── drivers/         # Driver interfaces
-│   └── core/            # Core interfaces
-├── test/                # Unit tests
-├── lib/                 # Third-party libraries
-└── cmake/               # CMake modules and toolchain files
+├── CMakeLists.txt          # Unified build configuration
+├── Makefile               # High-level build automation
+├── src/
+│   ├── core/              # Platform-agnostic business logic
+│   │   ├── StepSequencer.cpp   # Main sequencer engine
+│   │   └── ShiftControls.cpp   # Control handling
+│   ├── simulation/        # Host simulation (ncurses)
+│   │   ├── main.cpp
+│   │   ├── CursesDisplay.cpp
+│   │   └── CursesInput.cpp
+│   └── embedded/          # NeoTrellis M4 hardware
+│       ├── main.cpp
+│       ├── NeoTrellisDisplay.cpp
+│       ├── NeoTrellisInput.cpp
+│       ├── SeesawI2C.cpp
+│       └── SAMD51_I2C.cpp
+├── include/
+│   ├── core/              # Platform-agnostic interfaces
+│   ├── simulation/        # Simulation headers
+│   └── embedded/          # Hardware headers
+├── test/                  # Unit tests with mocks
+├── arduino_trellis/       # Arduino CLI project
+├── build/                 # Embedded build outputs
+├── build-simulation/      # Simulation build outputs
+└── build-test/           # Test build outputs
 ```
+
+## Hardware Specifications
+
+### NeoTrellis M4 (SAMD51J19A)
+- **CPU**: ARM Cortex-M4F @ 120MHz with FPU
+- **RAM**: 192KB
+- **Flash**: 512KB
+- **Interface**: 4×8 capacitive touch grid (32 buttons)
+- **Display**: 32 RGB NeoPixels
+- **Communication**: I2C Seesaw protocol
+- **Audio**: I2S capable
+- **Bootloader**: UF2 compatible
 
 ## Embedded-Specific Guidelines
 
 ### Memory Management
+- **No dynamic allocation** in real-time paths
+- **RAII for resource management**
+- **Static buffers** for predictable memory usage
+- **Memory pools** for dynamic-like behavior
 - **Fixed memory allocation**: No dynamic allocation after initialization
 - **Stack usage awareness**: Monitor stack depth for recursive functions
-- **Static buffers**: Use compile-time sized arrays
-- **Memory pools**: Pre-allocate pools for dynamic-like behavior
 
-### Real-time Constraints
+### Real-Time Constraints
+- **Sequencer precision**: ±0.1ms step timing
+- **Button scan rate**: Minimum 100Hz
+- **LED refresh**: 30-60 FPS
+- **I2C timing**: Respect Seesaw protocol constraints
+- **Audio callback**: <5ms latency for future audio features
 - **Deterministic execution**: Avoid unbounded loops
-- **ISR safety**: Keep interrupt handlers minimal
-- **Lock-free algorithms**: Use atomic operations where possible
-- **Fixed timing**: Respect sequencer timing requirements
+
+### Interrupt Safety
+- **Minimal ISRs**: Keep interrupt handlers short
+- **Atomic operations**: For shared variables
+- **Lock-free algorithms**: Avoid blocking in real-time paths
+- **Circular buffers**: For event queuing
 
 ### Hardware Integration
 - **I2C timing**: Respect bus timing and avoid blocking
@@ -147,17 +214,47 @@ trellis-controller/
 - **Button debouncing**: Implement proper debounce algorithms
 - **Power management**: Consider sleep modes when idle
 
-## Development Workflow for AI Agents
+## Development Workflows
 
-### Before Making Changes
+### Common Build Commands
 
+```bash
+# Simulation development
+make simulation          # Build and run simulation
+make simulation-build    # Build only
+make simulation-run      # Run existing build
+
+# Embedded development (Arduino CLI - Primary)
+cd arduino_trellis
+arduino-cli compile --fqbn adafruit:samd:adafruit_trellis_m4 .
+arduino-cli upload --fqbn adafruit:samd:adafruit_trellis_m4 -p /dev/cu.usbmodem* .
+
+# Alternative CMake embedded build (development/testing)
+make build               # Build embedded target
+# Note: Use Arduino CLI for actual hardware flashing
+
+# Testing and quality
+make test               # Run unit tests
+make coverage           # Generate coverage report
+make format             # Format code
+make lint               # Static analysis
+```
+
+### Hardware Debugging
+- **Serial debugging**: `DebugSerial.cpp` for embedded output
+- **Arduino CLI flashing**: Primary deployment method via UF2 bootloader
+- **SWD debugging**: Hardware breakpoints via J-Link/Black Magic Probe (if available)
+- **Memory profiling**: Stack usage monitoring
+
+### AI Agent Development Workflow
+
+#### Before Making Changes
 1. **Read existing code** to understand patterns and conventions
 2. **Check CMakeLists.txt** to understand build configuration
 3. **Review hardware datasheets** for SAMD51 and NeoTrellis
 4. **Understand memory constraints** of the target platform
 
-### When Writing Code
-
+#### When Writing Code
 1. **Use dependency injection** - pass dependencies via constructor
 2. **Follow RAII principles** for resource management
 3. **Write testable code** with clear interfaces
@@ -166,34 +263,54 @@ trellis-controller/
 6. **Throw errors instead of fallbacks** outside of test code
 7. **Keep files under 300-500 lines** - refactor if larger
 
-### Before Completing Tasks
+#### Before Completing Tasks
+1. **Build the project**: Use appropriate build commands above
+2. **Check compilation**: Build should be warning-free
+3. **Test on hardware** if possible
 
-1. **Build the project**: `./build.sh`
-2. **Check compilation**: `cmake --build build`
-3. **Verify no warnings**: Build should be warning-free
-4. **Test on hardware** if possible
+## Agent Collaboration Guidelines
 
-## Common Commands
+### For Agent Teams Working on This Project:
 
-```bash
-# Build commands
-./build.sh              # Quick build script
-mkdir build && cd build
-cmake ..                # Configure build
-make -j4                # Build with 4 cores
+1. **cpp-pro**: 
+   - Focus on modern C++17 patterns suitable for embedded
+   - Implement template metaprogramming for zero-overhead
+   - Ensure const correctness and RAII patterns
 
-# Flash to device
-make flash              # Flash via BOSSAC
+2. **embedded-systems**: 
+   - Respect SAMD51 hardware constraints
+   - Implement interrupt-safe code
+   - Optimize for deterministic execution
 
-# Clean build
-rm -rf build/
-mkdir build && cd build
-cmake .. && make
+3. **build-engineer**: 
+   - Maintain CMake and Arduino CLI compatibility
+   - Ensure conditional compilation works correctly
+   - Keep build artifacts properly organized
 
-# Debug build
-cmake -DCMAKE_BUILD_TYPE=Debug ..
-make
-```
+4. **test-automator**: 
+   - Create hardware simulation tests
+   - Maintain unit test coverage >80%
+   - Implement mock objects for dependencies
+
+5. **architect-reviewer**: 
+   - Validate platform abstraction boundaries
+   - Ensure dependency injection patterns
+   - Review interface design consistency
+
+6. **debugger**: 
+   - Use hardware-aware debugging techniques
+   - Leverage serial debugging for embedded
+   - Monitor memory and stack usage
+
+7. **performance-engineer**: 
+   - Optimize for real-time constraints
+   - Profile memory usage patterns
+   - Minimize interrupt latency
+
+8. **code-reviewer**: 
+   - Enforce error handling philosophy (no fallbacks)
+   - Check platform abstraction violations
+   - Verify file size limits (300-500 lines)
 
 ## Error Handling Pattern
 
@@ -211,57 +328,64 @@ try {
 }
 ```
 
-## Critical Don'ts for AI Agents
+## Critical Don'ts
 
-❌ **NEVER implement fallbacks or mock data** outside of test code - throw descriptive errors instead  
-❌ **NEVER use dynamic allocation** in interrupt handlers or real-time paths  
-❌ **NEVER ignore hardware timing constraints** - respect I2C/SPI timing  
-❌ **NEVER bypass the build system** - use CMake for all builds  
-❌ **NEVER commit build artifacts** - only source code  
-❌ **NEVER create files larger than 500 lines** - refactor for modularity  
-❌ **NEVER use blocking delays** in main loop - use state machines  
+❌ **NEVER implement fallbacks or mock data** outside test code - throw descriptive errors instead  
+❌ **NEVER tie business logic to specific platforms** - use platform abstraction  
+❌ **NEVER use dynamic allocation** in real-time paths  
+❌ **NEVER comment out CMake targets** - use conditional compilation  
+❌ **NEVER ignore the dependency injection pattern**  
+❌ **NEVER bypass the build system** - use provided targets  
+❌ **NEVER create files >500 lines** - refactor for modularity  
+❌ **NEVER use blocking operations** in main loop - use state machines  
 ❌ **NEVER ignore memory constraints** - SAMD51 has limited RAM  
 ❌ **NEVER skip error checking** for hardware operations  
 ❌ **NEVER use recursion** without bounded depth  
 
-## Success Criteria
+## Success Criteria for AI Agents
 
-An AI agent has successfully completed work when:
+✅ **Code compiles** on both simulation and embedded targets  
+✅ **Build system works** - both Arduino CLI and CMake  
+✅ **Platform abstraction maintained** - no business logic in platform code  
+✅ **Dependency injection used** throughout  
+✅ **Error messages are descriptive** with context  
+✅ **No fallbacks implemented** - errors thrown instead  
+✅ **Files appropriately sized** (<500 lines)  
+✅ **Memory usage fits** SAMD51 constraints  
+✅ **Real-time constraints met**  
+✅ **Tests maintain coverage** >80%  
 
-- ✅ Code compiles without warnings
-- ✅ Build system (CMake) works correctly
-- ✅ Code follows RAII and const-correctness
-- ✅ No dynamic allocation in real-time paths
-- ✅ Dependency injection used for testability
-- ✅ Hardware abstractions properly implemented
-- ✅ Error messages are descriptive
-- ✅ Files are appropriately sized (under 500 lines)
-- ✅ Memory usage fits within SAMD51 constraints
-- ✅ Timing requirements are met
-- ✅ No blocking operations in main loop
+## Future Expansion
 
-## Hardware Specifications
+### Planned Features
+- MIDI output support
+- Pattern save/load to flash
+- Multiple pattern chains
+- Per-track parameters
+- Audio synthesis integration
 
-### NeoTrellis M4 (SAMD51J19A)
-- **CPU**: ARM Cortex-M4F @ 120MHz
-- **RAM**: 192KB
-- **Flash**: 512KB
-- **FPU**: Hardware floating point
-- **Buttons**: 32 (4x8 grid)
-- **LEDs**: 32 RGB NeoPixels
-- **Communication**: I2C Seesaw protocol
-- **Audio**: I2S output capable
+### Architecture Ready For
+- **Additional platforms**: Easy to add new IDisplay/IInput implementations  
+- **New sequencer modes**: Business logic isolated from platform concerns  
+- **Enhanced testing**: Mock-friendly architecture  
+- **Performance optimization**: Platform-specific optimizations without core changes  
 
-## When in Doubt
+## Resources
 
-- Look at existing code in the project for patterns
-- Check ARM Cortex-M4 documentation for processor specifics
-- Follow C++ Core Guidelines for modern C++ practices
-- Use dependency injection for testability
-- Prioritize deterministic behavior over convenience
-- Throw errors with context instead of using fallbacks
-- Always use CMake targets instead of manual compilation
-- Document hardware-specific requirements in code comments
-- As much code as possible should be as platform-agnostic as possible. Platform specific touchpoints should be hidden from business logic by common interfaces that we can swap based on the intended build/execution context.
-- We must have a simulated/virtualized environment we can use to run functionality outside of the embedded context.
-- prefer typescript over python where possible
+- **SAMD51 Datasheet**: Hardware register programming
+- **Adafruit NeoTrellis M4 Guide**: Hardware-specific features
+- **Arduino SAMD Core**: Library compatibility
+- **Seesaw Protocol**: I2C communication details
+- **ARM Cortex-M4 Programming Manual**: Processor optimization
+- **C++ Core Guidelines**: Modern C++ practices
+
+## Key Principles Summary
+
+- **Platform abstraction is mandatory** - zero business logic in platform code
+- **Dependency injection throughout** - all classes accept dependencies via constructor
+- **Error handling philosophy** - throw descriptive errors, never use fallbacks
+- **Dual build system** - Arduino CLI for hardware, CMake for development/testing
+- **Memory constraints matter** - SAMD51 has limited resources
+- **Real-time performance required** - deterministic execution patterns
+- **Testing via simulation** - ncurses-based host simulation for development
+- **Code organization** - files <500 lines, clear separation of concerns

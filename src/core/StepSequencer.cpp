@@ -151,6 +151,9 @@ void StepSequencer::start() {
 
 void StepSequencer::stop() {
     playing_ = false;
+    // Reset playhead to beginning when stopped
+    currentStep_ = 0;
+    tickCounter_ = 0;
 }
 
 void StepSequencer::reset() {

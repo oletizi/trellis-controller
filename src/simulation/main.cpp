@@ -1,4 +1,5 @@
 #include "StepSequencer.h"
+#include "ShiftControls.h"
 #include "CursesDisplay.h"
 #include "CursesInput.h"
 #include "IClock.h"
@@ -35,6 +36,11 @@ public:
         StepSequencer::Dependencies deps;
         deps.clock = clock_.get();
         sequencer_ = std::make_unique<StepSequencer>(deps);
+        
+        // Initialize shift controls
+        ShiftControls::Dependencies shiftDeps;
+        shiftDeps.clock = clock_.get();
+        shiftControls_ = std::make_unique<ShiftControls>(shiftDeps);
     }
     
     ~SimulationApp() {
@@ -97,6 +103,7 @@ private:
     std::unique_ptr<CursesDisplay> display_;
     std::unique_ptr<CursesInput> input_;
     std::unique_ptr<StepSequencer> sequencer_;
+    std::unique_ptr<ShiftControls> shiftControls_;
     bool running_;
     uint32_t lastStepTime_;
     
@@ -138,8 +145,26 @@ private:
                 return;
             }
             
-            // Handle button presses to toggle steps
-            if (event.pressed && event.row < 4 && event.col < 8) {
+            // Handle shift controls first
+            if (shiftControls_->shouldHandleAsControl(event.row, event.col)) {
+                shiftControls_->handleShiftInput(event);
+                
+                // Check for triggered actions
+                auto action = shiftControls_->getTriggeredAction();
+                if (action == ShiftControls::ControlAction::StartStop) {
+                    if (sequencer_->isPlaying()) {
+                        sequencer_->stop();
+                    } else {
+                        sequencer_->start();
+                    }
+                    shiftControls_->clearTriggeredAction();
+                }
+                
+                // Update shift key visual feedback
+                updateShiftVisualFeedback();
+            }
+            // Handle normal button presses to toggle steps (only when not a control key)
+            else if (event.pressed && event.row < 4 && event.col < 8) {
                 sequencer_->toggleStep(event.row, event.col);
             }
         }
@@ -178,7 +203,20 @@ private:
             }
         }
         
+        // Add shift-key visual feedback
+        updateShiftVisualFeedback();
+        
         display_->refresh();
+    }
+    
+    void updateShiftVisualFeedback() {
+        if (shiftControls_->isShiftActive()) {
+            // Highlight shift key (bottom-left) in white
+            display_->setLED(3, 0, 128, 128, 128);
+            
+            // Highlight control key (bottom-right) in yellow when shift active
+            display_->setLED(3, 7, 128, 128, 0);
+        }
     }
 };
 

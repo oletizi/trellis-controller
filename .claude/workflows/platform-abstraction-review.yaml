@@ -1,0 +1,83 @@
+name: platform-abstraction-review
+description: Review and maintain platform abstraction architecture
+version: 1.0.0
+
+agents:
+  - architect-reviewer
+  - cpp-pro
+  - code-reviewer
+  - embedded-systems
+
+phases:
+  - name: abstraction-audit
+    description: Audit current platform abstraction implementation
+    agents:
+      - architect-reviewer
+    steps:
+      - Review interface definitions in /include/core/
+      - Check business logic isolation in /src/core/
+      - Validate platform implementations in /src/simulation/ and /src/embedded/
+      - Identify any abstraction violations
+
+  - name: dependency-injection-review
+    description: Review dependency injection patterns
+    agents:
+      - cpp-pro
+      - architect-reviewer
+    steps:
+      - Validate constructor injection usage
+      - Check Dependencies struct patterns
+      - Ensure testability through injection
+      - Review default implementation strategies
+
+  - name: interface-consistency-check
+    description: Ensure interface consistency across platforms
+    agents:
+      - code-reviewer
+      - embedded-systems
+    steps:
+      - Verify IDisplay implementations match interface
+      - Check IInput implementations consistency
+      - Validate IClock abstraction usage
+      - Ensure error handling consistency
+
+  - name: platform-isolation-verification
+    description: Verify platform code isolation
+    agents:
+      - architect-reviewer
+      - code-reviewer
+    steps:
+      - Check for business logic in platform-specific code
+      - Validate no direct hardware access in core logic
+      - Ensure conditional compilation boundaries
+      - Review include dependencies
+
+  - name: abstraction-improvement
+    description: Improve abstraction where needed
+    agents:
+      - cpp-pro
+      - architect-reviewer
+    steps:
+      - Refactor any abstraction violations found
+      - Improve interface design if needed
+      - Enhance dependency injection patterns
+      - Document abstraction boundaries clearly
+
+  - name: testing-validation
+    description: Validate abstraction through testing
+    agents:
+      - test-automator
+      - cpp-pro
+    steps:
+      - Test business logic with mock implementations
+      - Verify platform switching works correctly
+      - Check unit test isolation
+      - Validate simulation vs embedded behavior consistency
+
+success_criteria:
+  - Clear separation between business logic and platform code
+  - Dependency injection used consistently
+  - All interfaces properly abstracted
+  - No platform-specific code in business logic
+  - Mock testing validates abstractions
+  - Platform switching works seamlessly

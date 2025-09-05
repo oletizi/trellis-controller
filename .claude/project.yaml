@@ -1,0 +1,146 @@
+name: trellis-controller
+description: Advanced Multi-Platform C++ Step Sequencer for NeoTrellis M4
+version: 1.0.0
+type: multi-platform-embedded-application
+
+metadata:
+  platform: neotrellis-m4
+  mcu: SAMD51J19A
+  language: cpp17
+  domain: embedded-audio-sequencer
+  architecture: multi-platform-abstraction
+  
+agents:
+  core:
+    - name: orchestrator
+      role: Workflow coordinator and multi-agent task management
+      priority: high
+    
+    - name: cpp-pro
+      role: Modern C++17 development with embedded constraints
+      priority: high
+      specialization:
+        - Template metaprogramming
+        - RAII and const correctness
+        - Dependency injection patterns
+        - Zero-overhead abstractions
+    
+    - name: embedded-systems
+      role: SAMD51 hardware integration and real-time systems
+      priority: high
+      specialization:
+        - ARM Cortex-M4F optimization
+        - Interrupt handling
+        - I2C Seesaw protocol
+        - Memory management
+        - Real-time constraints
+
+  architecture:
+    - name: architect-reviewer
+      role: Platform abstraction and dependency injection validation
+      priority: high
+      specialization:
+        - Interface design
+        - Platform abstraction boundaries
+        - Dependency injection patterns
+        - Architecture consistency
+
+    - name: build-engineer
+      role: Dual build system management (CMake + Arduino CLI)
+      priority: high
+      specialization:
+        - CMake conditional compilation
+        - Arduino CLI integration
+        - Cross-compilation toolchain
+        - Build automation
+
+  quality:
+    - name: code-reviewer
+      role: Code quality with embedded and abstraction focus
+      priority: medium
+      specialization:
+        - Platform abstraction violations
+        - Error handling (no fallbacks)
+        - File size limits (300-500 lines)
+        - C++17 embedded best practices
+        
+    - name: test-automator
+      role: Multi-platform testing with dependency injection
+      priority: high
+      specialization:
+        - Mock object creation
+        - Hardware simulation testing
+        - Unit testing with DI
+        - Coverage analysis
+
+  optimization:
+    - name: performance-engineer
+      role: Embedded performance and resource optimization
+      priority: high
+      specialization:
+        - Memory profiling (192KB RAM limit)
+        - Real-time timing optimization
+        - ARM Cortex-M4F utilization
+        - Power optimization
+        
+    - name: debugger
+      role: Multi-platform debugging (simulation + hardware)
+      priority: medium
+      specialization:
+        - Serial debugging on embedded
+        - Hardware-in-loop testing
+        - Memory and stack profiling
+        - Cross-platform issue resolution
+
+workflows:
+  - main-development.yaml
+  - build-system-management.yaml
+  - platform-abstraction-review.yaml
+  - embedded-optimization.yaml
+
+settings:
+  hardware_constraints:
+    ram_limit_kb: 192
+    flash_limit_kb: 512
+    cpu_frequency_mhz: 120
+    button_count: 32
+    led_count: 32
+    
+  build_systems:
+    primary: arduino_cli
+    secondary: cmake
+    cross_compilation: true
+    simulation: ncurses
+    
+  development:
+    cpp_standard: cpp17
+    embedded_flags: ["-fno-exceptions", "-fno-rtti", "-fno-use-cxa-atexit"]
+    optimization_level: O2
+    warnings_as_errors: true
+    file_size_limit: 500
+    
+  architecture:
+    platform_abstraction: mandatory
+    dependency_injection: required
+    error_handling: no_fallbacks
+    memory_allocation: static_only
+    
+  testing:
+    framework: catch2
+    coverage_target: 80
+    mock_objects: required
+    simulation_testing: true
+    hardware_testing: true
+    
+  timing_constraints:
+    sequencer_precision_ms: 0.1
+    button_scan_rate_hz: 100
+    led_refresh_rate_fps: 60
+    i2c_max_latency_us: 100
+    
+  code_style:
+    line_length: 100
+    indent_size: 4
+    use_tabs: false
+    naming_convention: google
+    include_guards: pragma_once

@@ -1,0 +1,71 @@
+name: build-system-management
+description: Managing dual build system (CMake + Arduino CLI) workflow
+version: 1.0.0
+
+agents:
+  - build-engineer
+  - embedded-systems
+  - cpp-pro
+  - test-automator
+
+phases:
+  - name: build-system-analysis
+    description: Analyze current build configuration
+    agents:
+      - build-engineer
+    steps:
+      - Review CMakeLists.txt conditional compilation
+      - Check Arduino CLI project structure
+      - Validate Makefile automation targets
+      - Assess toolchain compatibility
+
+  - name: cmake-optimization
+    description: Optimize CMake configuration
+    agents:
+      - build-engineer
+      - cpp-pro
+    steps:
+      - Ensure single CMakeLists.txt with proper options
+      - Validate cross-compilation toolchain setup
+      - Optimize conditional source selection
+      - Test all build targets (simulation, embedded, test)
+
+  - name: arduino-cli-integration
+    description: Maintain Arduino CLI compatibility
+    agents:
+      - embedded-systems
+      - build-engineer
+    steps:
+      - Sync Arduino project with core sources
+      - Maintain library dependencies
+      - Test compilation for adafruit:samd board
+      - Verify UF2 bootloader compatibility
+
+  - name: automation-enhancement
+    description: Improve build automation
+    agents:
+      - build-engineer
+    steps:
+      - Enhance Makefile targets
+      - Create build validation scripts
+      - Implement parallel build optimization
+      - Add toolchain verification
+
+  - name: cross-platform-validation
+    description: Validate builds across environments
+    agents:
+      - test-automator
+      - build-engineer
+    steps:
+      - Test on macOS/Linux development environments
+      - Validate Windows compatibility if needed
+      - Check dependency installation automation
+      - Verify continuous integration readiness
+
+success_criteria:
+  - All build targets work correctly
+  - CMake conditional compilation functions properly
+  - Arduino CLI builds successfully for hardware
+  - Makefile automation is reliable
+  - Dependencies are properly managed
+  - Build times are optimized

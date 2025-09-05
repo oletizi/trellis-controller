@@ -1,0 +1,149 @@
+{
+  "project": {
+    "name": "trellis-controller",
+    "type": "multi-platform-embedded",
+    "platform": "neotrellis-m4",
+    "language": "cpp17",
+    "version": "1.0.0",
+    "architecture": "platform-abstraction"
+  },
+  "features": {
+    "platform_abstraction": true,
+    "dependency_injection": true,
+    "dual_build_system": true,
+    "hardware_simulation": true,
+    "unit_testing": true,
+    "code_coverage": true,
+    "performance_monitoring": true,
+    "memory_profiling": true,
+    "auto_review": true
+  },
+  "build_systems": {
+    "primary": {
+      "type": "arduino_cli",
+      "board": "adafruit:samd:adafruit_trellis_m4",
+      "project_path": "arduino_trellis",
+      "libraries": ["Adafruit NeoTrellis M4 Library"]
+    },
+    "secondary": {
+      "type": "cmake",
+      "targets": ["simulation", "embedded", "test"],
+      "conditional_compilation": true,
+      "cross_compilation": true,
+      "toolchain": "toolchain-arm-none-eabi.cmake"
+    },
+    "automation": {
+      "makefile_targets": ["simulation", "build", "test", "coverage", "flash"],
+      "parallel_builds": true,
+      "dependency_checking": true
+    }
+  },
+  "hardware": {
+    "mcu": "SAMD51J19A",
+    "cpu_frequency_mhz": 120,
+    "ram_kb": 192,
+    "flash_kb": 512,
+    "fpu": true,
+    "bootloader": "uf2",
+    "interface": {
+      "buttons": 32,
+      "leds": 32,
+      "grid_size": "4x8",
+      "communication": "i2c_seesaw"
+    }
+  },
+  "development": {
+    "cpp_standard": "17",
+    "compiler_flags": {
+      "common": ["-Wall", "-Wextra", "-g"],
+      "embedded": ["-fno-exceptions", "-fno-rtti", "-fno-use-cxa-atexit", "-ffunction-sections", "-fdata-sections"],
+      "simulation": ["-fsanitize=address", "-fsanitize=undefined"]
+    },
+    "linker_flags": {
+      "embedded": ["-T samd51.ld", "-Wl,--gc-sections", "-Wl,--print-memory-usage"]
+    },
+    "optimization": "O2",
+    "lto": true,
+    "warnings_as_errors": true
+  },
+  "architecture": {
+    "pattern": "dependency_injection",
+    "abstraction_layers": ["IDisplay", "IInput", "IClock"],
+    "platform_implementations": {
+      "simulation": ["CursesDisplay", "CursesInput"],
+      "embedded": ["NeoTrellisDisplay", "NeoTrellisInput"]
+    },
+    "business_logic": "platform_agnostic",
+    "error_handling": "no_fallbacks_outside_tests"
+  },
+  "constraints": {
+    "file_size_max_lines": 500,
+    "memory_allocation": "static_only",
+    "real_time_required": true,
+    "interrupt_safe": true,
+    "deterministic": true
+  },
+  "testing": {
+    "framework": "catch2",
+    "coverage_target": 80,
+    "mock_objects": true,
+    "platforms": ["simulation", "hardware"],
+    "types": ["unit", "integration", "hardware_in_loop"],
+    "automation": true
+  },
+  "timing": {
+    "sequencer_precision_ms": 0.1,
+    "button_scan_rate_hz": 100,
+    "led_refresh_rate_fps": 60,
+    "i2c_max_latency_us": 100,
+    "interrupt_max_latency_us": 10
+  },
+  "sequencer": {
+    "tracks": 4,
+    "steps_default": 16,
+    "steps_max": 64,
+    "bpm_default": 120,
+    "bpm_range": [60, 200],
+    "pattern_storage": "flash",
+    "real_time_editing": true
+  },
+  "ui": {
+    "led_colors": {
+      "track_0": "red",
+      "track_1": "green", 
+      "track_2": "blue",
+      "track_3": "yellow",
+      "current_step": "bright",
+      "inactive_current": "dim_white"
+    },
+    "button_debounce_ms": 20,
+    "visual_feedback": true,
+    "brightness_levels": 16
+  },
+  "validation": {
+    "platform_abstraction_check": true,
+    "dependency_injection_validation": true,
+    "memory_usage_monitoring": true,
+    "timing_validation": true,
+    "interface_consistency": true,
+    "build_system_verification": true
+  },
+  "debugging": {
+    "serial_output": true,
+    "hardware_flashing": "arduino_cli",
+    "hardware_debugging": "swd_optional",
+    "simulation_debugging": "gdb", 
+    "memory_profiling": true,
+    "stack_monitoring": true,
+    "performance_profiling": true
+  },
+  "code_style": {
+    "formatter": "clang-format",
+    "line_length": 100,
+    "indent": 4,
+    "tabs": false,
+    "naming": "google",
+    "headers": "pragma_once",
+    "const_correctness": "strict"
+  }
+}

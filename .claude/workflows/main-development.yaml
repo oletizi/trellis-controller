@@ -1,0 +1,97 @@
+name: main-development
+description: Primary development workflow for multi-platform C++ sequencer
+version: 1.0.0
+
+agents:
+  - orchestrator
+  - cpp-pro
+  - embedded-systems
+  - build-engineer
+  - architect-reviewer
+
+phases:
+  - name: requirements-analysis
+    description: Analyze feature requirements across platforms
+    agents:
+      - orchestrator
+      - architect-reviewer
+    steps:
+      - Define feature requirements for both simulation and embedded targets
+      - Identify platform-specific constraints
+      - Plan interface abstractions needed
+      - Validate dependency injection requirements
+
+  - name: interface-design
+    description: Design platform-agnostic interfaces
+    agents:
+      - cpp-pro
+      - architect-reviewer
+    steps:
+      - Design core interfaces (IDisplay, IInput, IClock)
+      - Plan dependency injection structure
+      - Define error handling strategy (no fallbacks)
+      - Create mock interfaces for testing
+
+  - name: simulation-implementation
+    description: Implement simulation version first
+    agents:
+      - cpp-pro
+      - build-engineer
+    steps:
+      - Implement CursesDisplay and CursesInput
+      - Create simulation main loop
+      - Build and test simulation target
+      - Validate business logic works correctly
+
+  - name: embedded-implementation
+    description: Implement embedded hardware version
+    agents:
+      - embedded-systems
+      - cpp-pro
+    steps:
+      - Implement NeoTrellisDisplay and NeoTrellisInput
+      - Create embedded main loop with hardware initialization
+      - Implement I2C Seesaw protocol communication
+      - Handle SAMD51 specific requirements
+
+  - name: dual-build-validation
+    description: Ensure both build systems work correctly
+    agents:
+      - build-engineer
+      - embedded-systems
+    steps:
+      - Test CMake simulation build
+      - Test CMake embedded cross-compilation
+      - Test Arduino CLI hardware build
+      - Verify conditional compilation works
+
+  - name: testing
+    description: Comprehensive testing across platforms
+    agents:
+      - test-automator
+      - cpp-pro
+    steps:
+      - Unit tests with dependency injection
+      - Hardware-in-loop testing
+      - Simulation validation
+      - Code coverage analysis
+
+  - name: integration
+    description: Final integration and optimization
+    agents:
+      - performance-engineer
+      - embedded-systems
+    steps:
+      - Profile memory usage on embedded target
+      - Optimize real-time performance
+      - Validate timing constraints
+      - Test on actual hardware
+
+success_criteria:
+  - Both simulation and embedded targets compile and run
+  - Platform abstraction maintained throughout
+  - Dependency injection pattern followed
+  - No fallbacks implemented outside test code
+  - Memory usage within SAMD51 limits
+  - Real-time constraints met
+  - Unit test coverage >80%

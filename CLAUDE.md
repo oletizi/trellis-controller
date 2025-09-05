@@ -1,34 +1,43 @@
-# Claude AI Agent Guidelines for Trellis Controller
+# Trellis Controller - Advanced Multi-Platform C++ Sequencer
 
-This document provides guidelines for AI agents (including Claude Code) working on the Trellis Controller project. It ensures consistency with the project's architectural principles, quality standards, and development patterns.
+## Project Overview
+This is a sophisticated embedded C++ project implementing a step sequencer for the NeoTrellis M4 with a **multi-platform architecture**. The project features complete hardware abstraction, dependency injection patterns, and dual build targets (embedded + simulation) using modern C++17 practices.
 
-## Overview
-
-Trellis Controller is an embedded C++ application framework for the AdaFruit NeoTrellis M4 platform focused on:
-
+**Key Features:**
 - C++ firmware for SAMD51 microcontrollers
-- Step sequencer and musical instrument applications
+- Step sequencer and musical instrument applications  
 - Real-time button/LED interaction via I2C/Seesaw protocol
-- CMake-based cross-compilation for ARM Cortex-M4
+- Dual build system: Arduino CLI + CMake
+- Complete platform abstraction with simulation capability
 - Audio synthesis and MIDI output capabilities
 - Pattern-based music sequencing
 
-## Core Requirements
+## Architecture Principles
 
-### Error Handling
-
-- **Never implement fallbacks or use mock data outside of test code**
-- **Throw errors with descriptive messages** instead of fallbacks
-- Errors let us know that something isn't implemented
-- Fallbacks and mock data are bug factories
+### Platform Abstraction Architecture
+**Critical**: This project uses rigorous platform abstraction with **zero business logic tied to specific platforms**:
 
 ```cpp
-// ✅ GOOD: Throw descriptive errors
+// Core interfaces (platform-agnostic)
+class IDisplay;     // LED/display abstraction
+class IInput;       // Button/input abstraction  
+class IClock;       // Timing abstraction
+
+// Platform implementations
+CursesDisplay;      // Terminal-based simulation
+NeoTrellisDisplay;  // Hardware RGB LEDs
+```
+
+### Error Handling Philosophy
+**CRITICAL**: Never implement fallbacks or mock data outside test code:
+
+```cpp
+// ✅ CORRECT: Throw descriptive errors
 if (!trellis.begin()) {
-    throw std::runtime_error("Failed to initialize NeoTrellis hardware");
+    throw std::runtime_error("Failed to initialize NeoTrellis hardware: check I2C connections");
 }
 
-// ❌ BAD: Using fallbacks
+// ❌ WRONG: Using fallbacks
 bool trellisReady = trellis.begin() || simulateHardware();
 ```
 

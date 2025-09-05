@@ -252,6 +252,48 @@ An AI agent has successfully completed work when:
 - **Communication**: I2C Seesaw protocol
 - **Audio**: I2S output capable
 
+## CMake Best Practices
+
+### Unified CMakeLists.txt with Multiple Targets
+
+**IMPORTANT**: Always use a single CMakeLists.txt file with conditional compilation for different build targets rather than maintaining separate CMake files.
+
+```cmake
+# Good: Single CMakeLists.txt with options
+option(BUILD_SIMULATION "Build simulation target" OFF)
+option(BUILD_TESTS "Build test target" OFF)
+
+if(BUILD_SIMULATION)
+    add_executable(simulation_target ...)
+elseif(BUILD_TESTS)
+    add_executable(test_target ...)
+else()
+    add_executable(embedded_target ...)
+endif()
+```
+
+### Creating Distinct Targets
+
+**NEVER temporarily comment out code** to switch between configurations. Instead, create distinct CMake targets that can coexist:
+
+```cmake
+# Good: Multiple targets in same build
+add_executable(trellis_embedded ${EMBEDDED_SOURCES})
+add_executable(trellis_simulation ${SIMULATION_SOURCES})
+add_executable(trellis_tests ${TEST_SOURCES})
+
+# Bad: Commenting out targets
+# add_executable(trellis_embedded ...)  # Commented for simulation
+add_executable(trellis_simulation ...)
+```
+
+Benefits of this approach:
+- All targets can be built from the same configuration
+- No need to reconfigure when switching between targets
+- CI/CD can build and test all targets in one pass
+- Code completion tools understand all configurations
+- Reduces configuration drift between targets
+
 ## When in Doubt
 
 - Look at existing code in the project for patterns
@@ -261,6 +303,8 @@ An AI agent has successfully completed work when:
 - Prioritize deterministic behavior over convenience
 - Throw errors with context instead of using fallbacks
 - Always use CMake targets instead of manual compilation
+- Use unified CMakeLists.txt with conditional compilation for different platforms
+- Create distinct targets instead of commenting out code
 - Document hardware-specific requirements in code comments
 - As much code as possible should be as platform-agnostic as possible. Platform specific touchpoints should be hidden from business logic by common interfaces that we can swap based on the intended build/execution context.
 - We must have a simulated/virtualized environment we can use to run functionality outside of the embedded context.

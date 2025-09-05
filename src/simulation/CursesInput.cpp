@@ -74,20 +74,36 @@ bool CursesInput::pollEvents() {
     while ((key = getch()) != ERR) {
         uint8_t row, col;
         if (getKeyMapping(key, row, col)) {
-            // Check if this is a state change
-            bool wasPressed = buttonStates_[row][col];
-            bool nowPressed = !wasPressed; // Toggle state for simplicity
+            // For shift key (Z), maintain state until released
+            bool isShiftKey = (row == 3 && col == 0);
             
-            if (nowPressed != wasPressed) {
-                buttonStates_[row][col] = nowPressed;
+            if (isShiftKey) {
+                // For shift key, toggle the state
+                bool wasPressed = buttonStates_[row][col];
+                buttonStates_[row][col] = !wasPressed;
                 
                 ButtonEvent event;
                 event.row = row;
                 event.col = col;
-                event.pressed = nowPressed;
+                event.pressed = !wasPressed;
                 event.timestamp = clock_ ? clock_->getCurrentTime() : 0;
-                
                 eventQueue_.push(event);
+            } else {
+                // For normal keys, generate press and immediate release
+                ButtonEvent pressEvent;
+                pressEvent.row = row;
+                pressEvent.col = col;
+                pressEvent.pressed = true;
+                pressEvent.timestamp = clock_ ? clock_->getCurrentTime() : 0;
+                eventQueue_.push(pressEvent);
+                
+                // Generate release event immediately after (simulate quick tap)
+                ButtonEvent releaseEvent;
+                releaseEvent.row = row;
+                releaseEvent.col = col;
+                releaseEvent.pressed = false;
+                releaseEvent.timestamp = clock_ ? clock_->getCurrentTime() : 0;
+                eventQueue_.push(releaseEvent);
             }
         }
         

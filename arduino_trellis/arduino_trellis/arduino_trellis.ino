@@ -77,6 +77,7 @@ public:
     
     void stop() {
         playing_ = false;
+        currentStep_ = 0;  // Reset playhead to beginning
     }
     
     void togglePlayback() {

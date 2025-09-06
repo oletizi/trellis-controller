@@ -163,3 +163,183 @@ public:
 - [ ] All 16 LEDs can be controlled individually
 - [ ] No interference with Teensy audio processing
 - [ ] System stable for extended use (>1 hour continuous operation)
+
+## Architectural Review & Recommendations
+
+### Critical Concerns Identified
+
+#### 1. **Architecture Principle Violation**
+The distributed approach breaks the project's core platform abstraction principles by splitting business logic across two embedded devices. This violates the established pattern where all business logic resides in `/src/core/` with clean hardware abstraction interfaces.
+
+#### 2. **Distributed System Complexity**
+- **State synchronization challenges** between M4 and Teensy
+- **Error recovery complexity** for I2C communication failures
+- **Debugging difficulty** with logic split across two processors
+- **Testing complexity** requiring hardware-in-loop for validation
+
+#### 3. **Performance Analysis**
+- **I2C Overhead**: ~15% bandwidth utilization (acceptable)
+- **Button-to-audio latency**: 4-8ms typical (acceptable for audio)
+- **Risk**: I2C blocking operations could cause audio dropouts
+- **Mitigation needed**: Separate I2C bus or DMA transfers
+
+#### 4. **Protocol Weaknesses**
+Current protocol design lacks:
+- **Acknowledgment mechanism** for command validation
+- **Error recovery protocol** for I2C failures
+- **Flow control** for high-frequency operations
+- **Version negotiation** for protocol evolution
+
+#### 5. **Timeline Reality Check**
+Based on distributed embedded system complexity:
+- Phase 2 (M4 Firmware): 16-24 hours (vs. 8-12 estimated)
+- Phase 3 (Teensy Driver): 12-16 hours (vs. 6-8 estimated)
+- Phase 5 (Integration): 12-20 hours (vs. 4-6 estimated)
+- **Realistic Total: 40-60 hours** (vs. 24-36 estimated)
+
+### Recommended Alternative Architectures
+
+#### Option 1: M4 as Primary Controller (Recommended)
+Keep NeoTrellis M4 as the main controller, add Teensy as audio coprocessor:
+
+```cpp
+// Extend current architecture with audio interface
+class IAudioOutput {
+    virtual void playNote(uint8_t note, uint8_t velocity) = 0;
+    virtual void stopNote(uint8_t note) = 0;
+};
+
+class TeensyAudioCoprocessor : public IAudioOutput {
+    // Simple serial or I2C commands for audio only
+};
+
+// Maintain clean dependency injection
+StepSequencer::Dependencies deps{
+    .display = &neoTrellisDisplay,
+    .input = &neoTrellisInput,
+    .audio = &teensyAudio  // New addition
+};
+```
+
+**Benefits**:
+- Preserves platform abstraction principles
+- Maintains single point of control
+- Simpler debugging and testing
+- Lower UI latency
+
+#### Option 2: Hybrid Architecture
+M4 handles all UI logic, Teensy receives audio commands only:
+
+```cpp
+// Unidirectional command flow (M4 → Teensy)
+class AudioCommandProtocol {
+    CMD_TRIGGER_SAMPLE = 0x01,  // [sample_id, velocity]
+    CMD_STOP_SAMPLE = 0x02,     // [sample_id]
+    CMD_SET_PARAMETER = 0x03,   // [param_id, value]
+};
+```
+
+**Benefits**:
+- Eliminates complex bidirectional I2C
+- M4 maintains all application state
+- Teensy focuses solely on audio processing
+- No state synchronization issues
+
+#### Option 3: Full Teensy Migration
+If Teensy must be primary controller:
+
+```cpp
+// Clean migration with M4 as pure I/O peripheral
+class NeoTrellisPeripheral : public IDisplay, public IInput {
+    // Minimal firmware on M4
+    // All business logic on Teensy
+};
+```
+
+**Considerations**:
+- Requires complete codebase migration to Teensy
+- M4 becomes "dumb" I/O device
+- Maintains architectural cleanliness
+- Higher development effort
+
+### Risk Mitigation Strategies
+
+#### High-Priority Risks
+
+1. **I2C Communication Failures**
+   - Implement timeout and retry mechanisms
+   - Add watchdog timers on both devices
+   - Design bus reset and recovery procedures
+   - Consider redundant communication channel
+
+2. **Audio Performance Impact**
+   - Use separate I2C bus (Wire1) for UI
+   - Implement DMA transfers where possible
+   - Profile interrupt latency carefully
+   - Design graceful degradation for UI updates
+
+3. **Development Complexity**
+   - Start with minimal viable protocol
+   - Use logic analyzer for I2C debugging (essential)
+   - Implement comprehensive logging
+   - Create simulation/mock environment first
+
+### Enhanced Protocol Design
+
+```cpp
+// Improved protocol with error handling
+struct CommandPacket {
+    uint8_t cmd;
+    uint8_t seq_num;  // For tracking
+    uint8_t data_len;
+    uint8_t data[29];
+    uint8_t checksum;
+};
+
+struct ResponsePacket {
+    uint8_t status;    // SUCCESS, ERROR, BUSY
+    uint8_t seq_num;   // Echo from command
+    uint8_t data[30];
+};
+```
+
+### Missing Components to Address
+
+1. **Power Management**
+   - Power sequencing between devices
+   - Brown-out detection
+   - Safe shutdown procedures
+
+2. **EMI/Noise Isolation**
+   - Separate ground planes for audio/digital
+   - Ferrite beads on I2C lines
+   - Shielded cables for audio signals
+
+3. **State Management**
+   - Explicit state machine definition
+   - State synchronization protocol
+   - Recovery from desync conditions
+
+4. **Development Infrastructure**
+   - Hardware debugging setup (SWD/JTAG)
+   - Automated testing framework
+   - Performance profiling tools
+
+### Recommended Path Forward
+
+1. **Evaluate Necessity**: Determine if M4's 120MHz Cortex-M4F can handle audio directly
+2. **Prototype Simple First**: Start with Option 1 (M4 primary + Teensy audio)
+3. **Measure Performance**: Profile actual I2C overhead and audio latency
+4. **Iterate Based on Data**: Only increase complexity if measurements require it
+5. **Maintain Architecture**: Preserve clean abstractions wherever possible
+
+### Conclusion
+
+While technically feasible, the distributed architecture introduces significant complexity that may not be justified. The project's existing clean architecture with platform abstraction and dependency injection should be preserved. Consider simpler alternatives before committing to the distributed approach.
+
+If proceeding with the distributed design:
+- Budget 40-60 hours minimum
+- Invest in proper I2C debugging tools
+- Implement robust error handling from the start
+- Design for testability with hardware mocks
+- Document state machines and protocols thoroughly

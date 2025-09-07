@@ -130,6 +130,7 @@ private:
     void initializePatternData();
     void updateButtonStates(uint32_t currentTime);
     void checkForHoldEvents();
+    void checkForHoldRelease(); // BUG FIX #1: Add method declaration
     void handleNormalModeButton(uint8_t button, bool pressed);
     void handleParameterLockInput(uint8_t button, bool pressed);
     bool buttonToTrackStep(uint8_t button, uint8_t& track, uint8_t& step) const;

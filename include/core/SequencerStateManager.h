@@ -47,7 +47,7 @@ public:
         bool isValid() const {
             return heldStep < 8 && 
                    heldTrack < 4 && 
-                   (controlGridStart == 0 || controlGridStart == 24);
+                   (controlGridStart == 0 || controlGridStart == 4);
         }
         
         // Get the button index of the held step

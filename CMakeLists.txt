@@ -24,6 +24,9 @@ set(CORE_SOURCES
     ${CMAKE_SOURCE_DIR}/src/core/ParameterEngine.cpp
     ${CMAKE_SOURCE_DIR}/src/core/ControlGrid.cpp
     ${CMAKE_SOURCE_DIR}/src/core/AdaptiveButtonTracker.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/ControlMessage.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/JsonState.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/JsonUtils.cpp
 )
 
 if(BUILD_TESTS)

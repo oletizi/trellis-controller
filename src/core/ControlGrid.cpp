@@ -257,8 +257,11 @@ ControlGrid::ControlMapping ControlGrid::calculateRightHandedMapping(uint8_t con
     ControlMapping mapping;
     
     // Set control area boundaries
-    mapping.controlAreaStart = controlStart;
-    mapping.controlAreaEnd = controlStart + 3 + 24;  // 4x4 grid
+    // BUG FIX: Correct calculation for 4x4 grid boundaries
+    // The control area spans 4 columns (controlStart to controlStart+3) across all 4 rows
+    // We need to include all buttons in that 4x4 area
+    mapping.controlAreaStart = controlStart;  // Starting column (0 or 4)
+    mapping.controlAreaEnd = 31;  // Always check using isInControlArea which validates properly
     
     // Right-handed layout - primary controls on right side of control grid
     // Bottom row (row 3) for note controls - most important
@@ -291,8 +294,11 @@ ControlGrid::ControlMapping ControlGrid::calculateLeftHandedMapping(uint8_t cont
     ControlMapping mapping;
     
     // Set control area boundaries
-    mapping.controlAreaStart = controlStart;
-    mapping.controlAreaEnd = controlStart + 3 + 24;  // 4x4 grid
+    // BUG FIX: Correct calculation for 4x4 grid boundaries
+    // The control area spans 4 columns (controlStart to controlStart+3) across all 4 rows
+    // We need to include all buttons in that 4x4 area
+    mapping.controlAreaStart = controlStart;  // Starting column (0 or 4)
+    mapping.controlAreaEnd = 31;  // Always check using isInControlArea which validates properly
     
     // Left-handed layout - primary controls on left side of control grid
     // Bottom row (row 3) for note controls - most important

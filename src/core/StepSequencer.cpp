@@ -398,18 +398,30 @@ void StepSequencer::handleNormalModeButton(uint8_t button, bool pressed) {
     uint8_t track, step;
     if (!buttonToTrackStep(button, track, step)) return;
     
-    // Check if this was a quick tap (not a hold)
+    // BUG FIX: Don't toggle step if button was used for parameter lock
+    // Check if hold was processed (indicates it was used for parameter lock)
     const auto& buttonState = buttonTracker_.getButtonState(button);
+    if (buttonState.holdProcessed) {
+        // This button was used for parameter lock, don't toggle
+        #ifndef ARDUINO
+        fprintf(stderr, "NORMAL_MODE: Button %d was used for parameter lock, skipping toggle\n", button);
+        #endif
+        return;
+    }
+    
+    // Check if this was a quick tap (not a hold)
     if (buttonState.holdDuration < 500) {  // Less than hold threshold
         toggleStep(track, step);
     }
 }
 
 void StepSequencer::handleParameterLockInput(uint8_t button, bool pressed) {
+    // BUG FIX: Only process button presses for parameter adjustment
+    // Don't exit on button releases - only exit when the held step is released
     if (!pressed) return;
     
     #ifndef ARDUINO
-    fprintf(stderr, "PARAM_LOCK: handleParameterLockInput called for button %d\n", button);
+    fprintf(stderr, "PARAM_LOCK: handleParameterLockInput called for button %d (pressed=%d)\n", button, pressed);
     #endif
     
     const auto& context = stateManager_.getParameterLockContext();
@@ -420,12 +432,13 @@ void StepSequencer::handleParameterLockInput(uint8_t button, bool pressed) {
             mapping.isValid, context.heldStep, context.heldTrack);
     #endif
     
+    // BUG FIX: Don't exit parameter lock mode when pressing control buttons
+    // Only check if it's in control area for parameter adjustment
     if (!mapping.isInControlArea(button)) {
-        // Button outside control area - exit parameter lock mode
+        // Button outside control area - ignore it, don't exit
         #ifndef ARDUINO
-        fprintf(stderr, "PARAM_LOCK: Button %d outside control area, exiting parameter lock mode\n", button);
+        fprintf(stderr, "PARAM_LOCK: Button %d outside control area, ignoring\n", button);
         #endif
-        stateManager_.exitParameterLockMode();
         return;
     }
     

@@ -1,0 +1,271 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://trellis-controller/schemas/sequencer-state.json",
+  "title": "Trellis Step Sequencer State",
+  "description": "Complete state representation for the Trellis step sequencer",
+  "type": "object",
+  "required": ["version", "sequencer", "pattern", "parameterLocks", "buttons", "parameterLockMode", "tracks"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Schema version for compatibility",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this state was captured"
+    },
+    "sequencer": {
+      "type": "object",
+      "description": "Core sequencer state",
+      "required": ["bpm", "stepCount", "currentStep", "playing", "currentTime", "tickCounter"],
+      "additionalProperties": false,
+      "properties": {
+        "bpm": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 200,
+          "description": "Beats per minute"
+        },
+        "stepCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "description": "Number of steps in pattern"
+        },
+        "currentStep": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7,
+          "description": "Currently playing step"
+        },
+        "playing": {
+          "type": "boolean",
+          "description": "Whether sequencer is playing"
+        },
+        "currentTime": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Current time in milliseconds"
+        },
+        "tickCounter": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total ticks since start"
+        }
+      }
+    },
+    "pattern": {
+      "type": "array",
+      "description": "4x8 grid of step states",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "array",
+        "minItems": 8,
+        "maxItems": 8,
+        "items": {
+          "$ref": "#/definitions/stepState"
+        }
+      }
+    },
+    "parameterLocks": {
+      "type": "array",
+      "description": "Parameter lock pool (64 slots)",
+      "minItems": 64,
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/definitions/parameterLock"
+      }
+    },
+    "buttons": {
+      "type": "array",
+      "description": "Button states (32 buttons)",
+      "minItems": 32,
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/definitions/buttonState"
+      }
+    },
+    "parameterLockMode": {
+      "type": "object",
+      "description": "Parameter lock mode state",
+      "required": ["active", "heldTrack", "heldStep"],
+      "additionalProperties": false,
+      "properties": {
+        "active": {
+          "type": "boolean",
+          "description": "Whether in parameter lock mode"
+        },
+        "heldTrack": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "Track of held step (255 = none)"
+        },
+        "heldStep": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "Held step index (255 = none)"
+        }
+      }
+    },
+    "tracks": {
+      "type": "array",
+      "description": "Track settings",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/definitions/trackSettings"
+      }
+    }
+  },
+  "definitions": {
+    "stepState": {
+      "type": "object",
+      "description": "Individual step state",
+      "required": ["active", "hasLock", "lockIndex"],
+      "additionalProperties": false,
+      "properties": {
+        "active": {
+          "type": "boolean",
+          "description": "Whether step is active"
+        },
+        "hasLock": {
+          "type": "boolean",
+          "description": "Whether step has parameter locks"
+        },
+        "lockIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "Index in parameter lock pool (255 = none)"
+        }
+      }
+    },
+    "parameterLock": {
+      "type": "object",
+      "description": "Parameter lock data",
+      "required": ["inUse", "stepIndex", "trackIndex", "activeLocks", "noteOffset", "velocity", "length"],
+      "additionalProperties": false,
+      "properties": {
+        "inUse": {
+          "type": "boolean",
+          "description": "Whether this slot is in use"
+        },
+        "stepIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "Step index (255 = none)"
+        },
+        "trackIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "Track index (255 = none)"
+        },
+        "activeLocks": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "description": "Bitmask of active parameter types"
+        },
+        "noteOffset": {
+          "type": "integer",
+          "minimum": -64,
+          "maximum": 63,
+          "description": "Note offset in semitones"
+        },
+        "velocity": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127,
+          "description": "MIDI velocity"
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255,
+          "description": "Gate length in ticks"
+        }
+      }
+    },
+    "buttonState": {
+      "type": "object",
+      "description": "Button state tracking",
+      "required": ["pressed", "wasPressed", "wasReleased", "pressTime", "releaseTime", "isHeld", "holdProcessed", "holdDuration"],
+      "additionalProperties": false,
+      "properties": {
+        "pressed": {
+          "type": "boolean",
+          "description": "Currently pressed"
+        },
+        "wasPressed": {
+          "type": "boolean",
+          "description": "Was pressed this cycle"
+        },
+        "wasReleased": {
+          "type": "boolean",
+          "description": "Was released this cycle"
+        },
+        "pressTime": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "When button was pressed (ms)"
+        },
+        "releaseTime": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "When button was released (ms)"
+        },
+        "isHeld": {
+          "type": "boolean",
+          "description": "Button is being held"
+        },
+        "holdProcessed": {
+          "type": "boolean",
+          "description": "Hold event has been processed"
+        },
+        "holdDuration": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How long button was held (ms)"
+        }
+      }
+    },
+    "trackSettings": {
+      "type": "object",
+      "description": "Track configuration",
+      "required": ["volume", "muted", "note", "channel"],
+      "additionalProperties": false,
+      "properties": {
+        "volume": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127,
+          "description": "Track volume"
+        },
+        "muted": {
+          "type": "boolean",
+          "description": "Whether track is muted"
+        },
+        "note": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127,
+          "description": "Default MIDI note"
+        },
+        "channel": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15,
+          "description": "MIDI channel"
+        }
+      }
+    }
+  }
+}

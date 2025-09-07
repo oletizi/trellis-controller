@@ -60,7 +60,14 @@ public:
         
         // Check if button is within control area
         bool isInControlArea(uint8_t button) const {
-            return isValid && button >= controlAreaStart && button <= controlAreaEnd;
+            if (!isValid || button >= 32) return false;
+            
+            // BUG FIX: Properly check if button is in the 4x4 control grid
+            // Control area spans 4 columns starting at controlAreaStart
+            uint8_t col = button % 8;
+            
+            // Check if column is in the control grid (4 consecutive columns)
+            return col >= controlAreaStart && col < (controlAreaStart + 4);
         }
         
         // Get parameter type for button

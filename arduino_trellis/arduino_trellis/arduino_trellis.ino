@@ -5,31 +5,37 @@
 #include <Adafruit_NeoTrellisM4.h>
 #include <MIDIUSB.h>
 
+// Include core interfaces
+#include "core/StepSequencer.h"
+#include "core/IClock.h"
+#include "core/IMidiOutput.h"
+#include "core/IDisplay.h"
+#include "core/IInput.h"
+
 // Hardware objects
 Adafruit_NeoTrellisM4 trellis;
 
-// Simple Arduino clock implementation for core
-class ArduinoSystemClock {
+// Hardware abstraction implementations
+class ArduinoClock : public IClock {
 public:
-    uint32_t getCurrentTime() const {
-        return millis();
+    uint32_t millis() const override {
+        return ::millis();
     }
     
-    void delay(uint32_t milliseconds) {
+    void delay(uint32_t milliseconds) override {
         ::delay(milliseconds);
     }
     
-    void reset() {
+    void reset() override {
         // No-op for Arduino millis()
     }
 };
 
-// Simple Arduino MIDI Output implementation
-class ArduinoMidiOutput {
+class ArduinoMidiOutput : public IMidiOutput {
 public:
     ArduinoMidiOutput() : connected_(true) {}
     
-    void sendNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
+    void sendNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) override {
         if (!connected_) return;
         
         midiEventPacket_t noteOn = {0x09, static_cast<uint8_t>(0x90 | channel), note, velocity};
@@ -44,7 +50,7 @@ public:
         Serial.println(velocity);
     }
     
-    void sendNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {
+    void sendNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) override {
         if (!connected_) return;
         
         midiEventPacket_t noteOff = {0x08, static_cast<uint8_t>(0x80 | channel), note, velocity};
@@ -52,7 +58,7 @@ public:
         MidiUSB.flush();
     }
     
-    void sendStart() {
+    void sendStart() override {
         if (!connected_) return;
         
         midiEventPacket_t startMsg = {0x0F, 0xFA, 0, 0};
@@ -61,7 +67,7 @@ public:
         Serial.println("MIDI: Start sent");
     }
     
-    void sendStop() {
+    void sendStop() override {
         if (!connected_) return;
         
         midiEventPacket_t stopMsg = {0x0F, 0xFC, 0, 0};
@@ -70,11 +76,11 @@ public:
         Serial.println("MIDI: Stop sent");
     }
     
-    bool isConnected() const {
+    bool isConnected() const override {
         return connected_;
     }
     
-    void flush() {
+    void flush() override {
         MidiUSB.flush();
     }
 
@@ -82,365 +88,175 @@ private:
     bool connected_;
 };
 
-// Simple core application logic embedded directly
-class StepSequencer {
-private:
-    static const int MAX_TRACKS = 4;
-    static const int MAX_STEPS = 8;
-    
-    bool pattern_[MAX_TRACKS][MAX_STEPS];
-    uint8_t trackMidiNotes_[MAX_TRACKS];
-    uint8_t trackMidiChannels_[MAX_TRACKS];
-    uint8_t trackVolumes_[MAX_TRACKS];
-    
-    uint16_t bpm_;
-    uint8_t stepCount_;
-    uint8_t currentStep_;
-    bool playing_;
-    unsigned long lastStepTime_;
-    unsigned long stepInterval_;
-    
-    ArduinoMidiOutput* midiOutput_;
-    
+class ArduinoDisplay : public IDisplay {
 public:
-    StepSequencer(ArduinoMidiOutput* midi = nullptr) 
-        : bpm_(120)
-        , stepCount_(MAX_STEPS)
-        , currentStep_(0)
-        , playing_(true)
-        , lastStepTime_(0)
-        , midiOutput_(midi) {
-        
-        // Clear pattern
-        for (int track = 0; track < MAX_TRACKS; track++) {
-            for (int step = 0; step < MAX_STEPS; step++) {
-                pattern_[track][step] = false;
-            }
-            trackMidiNotes_[track] = 36 + track;  // C2, C#2, D2, D#2
-            trackMidiChannels_[track] = 9;        // MIDI channel 10 (0-based)
-            trackVolumes_[track] = 127;
-        }
-        
-        calculateStepInterval();
-    }
+    explicit ArduinoDisplay(Adafruit_NeoTrellisM4* trellis) : trellis_(trellis) {}
     
-    void init(uint16_t bpm, uint8_t stepCount) {
-        bpm_ = bpm;
-        stepCount_ = (stepCount > MAX_STEPS) ? MAX_STEPS : stepCount;
-        calculateStepInterval();
-        reset();
-    }
-    
-    void calculateStepInterval() {
-        stepInterval_ = 60000 / (bpm_ * 2); // 8th notes for 8-step pattern
-    }
-    
-    void tick() {
-        if (!playing_) return;
-        
-        unsigned long currentTime = millis();
-        if (currentTime - lastStepTime_ >= stepInterval_) {
-            advance();
-            lastStepTime_ = currentTime;
+    void setPixel(uint8_t index, uint32_t color) override {
+        if (index < 32 && trellis_) {
+            // Convert from RGB to trellis color format
+            uint8_t r = (color >> 16) & 0xFF;
+            uint8_t g = (color >> 8) & 0xFF;
+            uint8_t b = color & 0xFF;
+            trellis_->setPixelColor(index, r, g, b);
         }
     }
     
-    void advance() {
-        currentStep_ = (currentStep_ + 1) % stepCount_;
-        sendMidiTriggers();
-    }
-    
-    void sendMidiTriggers() {
-        if (!midiOutput_ || !midiOutput_->isConnected()) {
-            return;
-        }
-        
-        for (uint8_t track = 0; track < MAX_TRACKS; track++) {
-            if (pattern_[track][currentStep_]) {
-                midiOutput_->sendNoteOn(
-                    trackMidiChannels_[track],
-                    trackMidiNotes_[track],
-                    trackVolumes_[track]
-                );
-            }
+    void show() override {
+        if (trellis_) {
+            trellis_->show();
         }
     }
     
-    void reset() {
-        currentStep_ = 0;
-        lastStepTime_ = millis();
-    }
-    
-    void start() {
-        playing_ = true;
-        lastStepTime_ = millis();
-        if (midiOutput_) midiOutput_->sendStart();
-    }
-    
-    void stop() {
-        playing_ = false;
-        currentStep_ = 0;
-        if (midiOutput_) midiOutput_->sendStop();
-    }
-    
-    void togglePlayback() {
-        if (playing_) {
-            stop();
-            Serial.println("Sequencer stopped");
-        } else {
-            start();
-            Serial.println("Sequencer started");
+    void setBrightness(uint8_t brightness) override {
+        if (trellis_) {
+            trellis_->setBrightness(brightness);
         }
     }
     
-    void toggleStep(uint8_t track, uint8_t step) {
-        if (track < MAX_TRACKS && step < MAX_STEPS) {
-            pattern_[track][step] = !pattern_[track][step];
+    void clear() override {
+        if (trellis_) {
+            trellis_->fill(0);
         }
     }
+
+private:
+    Adafruit_NeoTrellisM4* trellis_;
+};
+
+class ArduinoInput : public IInput {
+public:
+    explicit ArduinoInput(Adafruit_NeoTrellisM4* trellis) : trellis_(trellis) {}
     
-    bool isStepActive(uint8_t track, uint8_t step) const {
-        if (track < MAX_TRACKS && step < MAX_STEPS) {
-            return pattern_[track][step];
-        }
+    uint32_t getButtonState() override {
+        // This would need to be implemented based on how NeoTrellis M4 scans
+        // For now, return 0 - actual implementation would scan the matrix
+        return 0;
+    }
+    
+    bool isButtonPressed(uint8_t button) override {
+        // Individual button state - would need hardware implementation
         return false;
     }
     
-    void setTrackMidiNote(uint8_t track, uint8_t note) {
-        if (track < MAX_TRACKS) {
-            trackMidiNotes_[track] = note;
-        }
+    void update() override {
+        // Update button scanning state
     }
-    
-    uint8_t getTrackMidiNote(uint8_t track) const {
-        return (track < MAX_TRACKS) ? trackMidiNotes_[track] : 0;
-    }
-    
-    uint8_t getCurrentStep() const { return currentStep_; }
-    bool isPlaying() const { return playing_; }
-    uint16_t getBPM() const { return bpm_; }
-    
-    void setBPM(uint16_t bpm) {
-        bpm_ = bpm;
-        calculateStepInterval();
-    }
-    
-    // Setup demo pattern with proper MIDI notes
-    void setupDemoPattern() {
-        // Configure MIDI notes for drum sounds
-        trackMidiNotes_[0] = 36;  // Kick drum (C2)
-        trackMidiNotes_[1] = 38;  // Snare (D2)
-        trackMidiNotes_[2] = 42;  // Closed hi-hat (F#2)
-        trackMidiNotes_[3] = 46;  // Open hi-hat (A#2)
-        
-        // Create basic drum pattern
-        pattern_[0][0] = pattern_[0][4] = true;  // Kick on 1, 5
-        pattern_[1][2] = pattern_[1][6] = true;  // Snare on 3, 7
-        pattern_[2][1] = pattern_[2][3] = pattern_[2][5] = pattern_[2][7] = true;  // Hi-hat offbeats
-        pattern_[3][3] = true;  // Open hi-hat on 4
-    }
+
+private:
+    Adafruit_NeoTrellisM4* trellis_;
 };
 
-// Simple shift controls embedded
-class ShiftControls {
-private:
-    static const uint8_t SHIFT_ROW = 3;
-    static const uint8_t SHIFT_COL = 0;  // Bottom-left key
-    static const uint8_t CONTROL_ROW = 3;
-    static const uint8_t CONTROL_COL = 7; // Bottom-right key
-    
-    bool shiftActive_;
-    bool startStopTriggered_;
-    
-public:
-    ShiftControls() : shiftActive_(false), startStopTriggered_(false) {}
-    
-    void handleInput(uint8_t row, uint8_t col, bool pressed) {
-        if (isShiftKey(row, col)) {
-            shiftActive_ = pressed;
-        }
-        else if (isControlKey(row, col) && pressed && shiftActive_) {
-            startStopTriggered_ = true;
-        }
-    }
-    
-    bool isShiftActive() const {
-        return shiftActive_;
-    }
-    
-    bool shouldHandleAsShiftControl(uint8_t row, uint8_t col) const {
-        return isShiftKey(row, col) || isControlKey(row, col);
-    }
-    
-    bool getAndClearStartStopTrigger() {
-        bool triggered = startStopTriggered_;
-        startStopTriggered_ = false;
-        return triggered;
-    }
-    
-private:
-    bool isShiftKey(uint8_t row, uint8_t col) const {
-        return (row == SHIFT_ROW && col == SHIFT_COL);
-    }
-    
-    bool isControlKey(uint8_t row, uint8_t col) const {
-        return (row == CONTROL_ROW && col == CONTROL_COL);
-    }
-};
-
-// Global instances
+// Hardware abstraction instances
+ArduinoClock systemClock;
 ArduinoMidiOutput midiOutput;
-StepSequencer sequencer(&midiOutput);
-ShiftControls shiftControls;
+ArduinoDisplay display(&trellis);
+ArduinoInput input(&trellis);
 
-// Color definitions
-#define COLOR_OFF     0x000000
-#define COLOR_RED     0x400000  // Track 0 - Kick
-#define COLOR_GREEN   0x004000  // Track 1 - Snare
-#define COLOR_BLUE    0x000040  // Track 2 - Hi-hat
-#define COLOR_YELLOW  0x404000  // Track 3 - Accent
-#define COLOR_RED_BRIGHT    0xFF0000
-#define COLOR_GREEN_BRIGHT  0x00FF00
-#define COLOR_BLUE_BRIGHT   0x0000FF
-#define COLOR_YELLOW_BRIGHT 0xFFFF00
-#define COLOR_WHITE_DIM     0x101010
+// Core sequencer instance
+StepSequencer* sequencer = nullptr;
+
+// Button state tracking for parameter locks
+uint32_t lastButtonStates = 0;
+uint32_t currentButtonStates = 0;
 
 void setup() {
     Serial.begin(115200);
-    while (!Serial && millis() < 5000) delay(100);
+    while (!Serial && millis() < 3000); // Wait for serial or timeout
     
-    Serial.println("=== NeoTrellis M4 Step Sequencer with MIDI ===");
+    Serial.println("NeoTrellis M4 Step Sequencer with Parameter Locks");
     
     // Initialize hardware
-    trellis.begin();
+    if (!trellis.begin()) {
+        Serial.println("Error: Failed to initialize NeoTrellis M4!");
+        while (1) delay(100);
+    }
     
-    trellis.setBrightness(80);
-    trellis.fill(COLOR_OFF);
-    trellis.show();
+    // Set up dependencies
+    StepSequencer::Dependencies deps;
+    deps.clock = &systemClock;
+    deps.midiOutput = &midiOutput;
+    deps.display = &display;
+    deps.input = &input;
     
-    // Initialize sequencer with MIDI support
-    sequencer.init(120, 8); // 120 BPM, 8 steps
-    sequencer.setupDemoPattern();
-    sequencer.start();
+    // Create core sequencer
+    sequencer = new StepSequencer(deps);
+    sequencer->init(120, 8); // 120 BPM, 8 steps
     
-    Serial.println("Hardware initialized successfully!");
-    Serial.print("- BPM: "); Serial.println(sequencer.getBPM());
-    Serial.println("- Tracks: 4 (Red=Kick, Green=Snare, Blue=Hi-hat, Yellow=Open HH)");
-    Serial.println("- Steps: 8");
-    Serial.println("- USB MIDI enabled on channel 10");
-    Serial.println("- Shift (bottom-left) + bottom-right for play/stop");
-    Serial.println("- Press buttons to toggle steps");
-    Serial.println("Ready!");
+    // Set up NeoTrellis callbacks
+    for (int i = 0; i < 32; i++) {
+        trellis.activateKey(i, SEESAW_KEYPAD_EDGE_RISING);
+        trellis.activateKey(i, SEESAW_KEYPAD_EDGE_FALLING);
+    }
+    
+    // Initial display setup
+    display.setBrightness(50);
+    display.clear();
+    display.show();
+    
+    // Start the sequencer
+    sequencer->start();
+    
+    Serial.println("Sequencer initialized and started");
+    Serial.println("Hold a step button to enter parameter lock mode");
+    Serial.println("In parameter lock mode:");
+    Serial.println("- Bottom buttons adjust note (C1/D1 or C5/D5)");
+    Serial.println("- Other controls adjust velocity, length, etc.");
 }
 
 void loop() {
-    // Update sequencer timing
-    sequencer.tick();
+    // Core sequencer tick (handles timing and parameter locks)
+    sequencer->tick();
     
-    // Handle button input
-    handleInput();
+    // Handle hardware button input
+    handleButtons();
     
-    // Update LED display
-    updateDisplay();
+    // Update display
+    sequencer->updateDisplay();
     
-    // Small delay for stability
-    delay(10);
+    // Small delay to prevent overwhelming the system
+    delay(1);
 }
 
-void handleInput() {
-    // Check for button presses using keypad functionality
+void handleButtons() {
+    // Read button states from hardware
+    currentButtonStates = 0;
+    
+    // NeoTrellis M4 button scanning
     trellis.tick();
     
-    // Check each key individually since NeoTrellis M4 library 
-    // doesn't have the same API as regular NeoTrellis
-    static bool keyStates[32] = {false}; // Track previous states
-    
-    for (int i = 0; i < 32; i++) {
-        bool currentPressed = trellis.justPressed(i);
-        bool currentReleased = trellis.justReleased(i);
+    while (trellis.available()) {
+        keyEvent evt = trellis.read();
+        uint8_t key = evt.bit.NUM;
+        bool pressed = evt.bit.EDGE == SEESAW_KEYPAD_EDGE_RISING;
         
-        if (currentPressed || currentReleased) {
-            int row = i / 8;  // 4 rows
-            int col = i % 8;  // 8 columns
-            
-            // Handle shift controls first
-            if (shiftControls.shouldHandleAsShiftControl(row, col)) {
-                shiftControls.handleInput(row, col, currentPressed);
-                
-                // Check for start/stop trigger
-                if (shiftControls.getAndClearStartStopTrigger()) {
-                    sequencer.togglePlayback();
-                }
-                continue; // Skip normal step processing
-            }
-            
-            // Normal step sequencer input (only on press, only in sequencer area)
-            if (currentPressed && row < 4 && col < 8) {
-                sequencer.toggleStep(row, col);
-                
-                Serial.print("Toggled step [");
-                Serial.print(row);
-                Serial.print(",");
-                Serial.print(col);
-                Serial.print("] -> ");
-                Serial.println(sequencer.isStepActive(row, col) ? "ON" : "OFF");
-            }
+        // Update button state mask
+        if (pressed) {
+            currentButtonStates |= (1UL << key);
         }
-    }
-}
-
-void updateDisplay() {
-    int currentStep = sequencer.getCurrentStep();
-    bool isPlaying = sequencer.isPlaying();
-    
-    // Update all LEDs based on pattern and current step
-    for (int row = 0; row < 4; row++) {
-        for (int col = 0; col < 8; col++) {
-            int ledIndex = row * 8 + col;
-            bool stepActive = sequencer.isStepActive(row, col);
-            bool isCurrentStep = (col == currentStep && isPlaying);
-            
-            uint32_t color = COLOR_OFF;
-            
-            if (stepActive) {
-                // Different colors for different tracks
-                switch (row) {
-                    case 0: color = isCurrentStep ? COLOR_RED_BRIGHT : COLOR_RED; break;
-                    case 1: color = isCurrentStep ? COLOR_GREEN_BRIGHT : COLOR_GREEN; break;
-                    case 2: color = isCurrentStep ? COLOR_BLUE_BRIGHT : COLOR_BLUE; break;
-                    case 3: color = isCurrentStep ? COLOR_YELLOW_BRIGHT : COLOR_YELLOW; break;
-                }
-            } else if (isCurrentStep) {
-                // Dim white for current step when not active
-                color = COLOR_WHITE_DIM;
-            }
-            
-            trellis.setPixelColor(ledIndex, color);
-        }
-    }
-    
-    // Add shift-key visual feedback
-    if (shiftControls.isShiftActive()) {
-        // Highlight shift key (bottom-left) in white
-        trellis.setPixelColor(24, 0x404040);  // Row 3, Col 0 = index 24
         
-        // Highlight control key (bottom-right) in dim yellow when shift active
-        trellis.setPixelColor(31, 0x404000);  // Row 3, Col 7 = index 31
-    }
-    
-    trellis.show();
-}
-
-// Debug function to print current pattern
-void printPattern() {
-    Serial.println("=== Current Pattern ===");
-    for (int row = 0; row < 4; row++) {
-        Serial.print("Track "); Serial.print(row); Serial.print(": ");
-        for (int col = 0; col < 8; col++) {
-            Serial.print(sequencer.isStepActive(row, col) ? "X" : "-");
+        // Forward to core sequencer
+        if (sequencer) {
+            sequencer->handleButton(key, pressed, millis());
+        }
+        
+        // Enhanced debug output
+        Serial.print("Button ");
+        Serial.print(key);
+        Serial.print(pressed ? " pressed" : " released");
+        Serial.print(" at time ");
+        Serial.print(millis());
+        if (sequencer->isInParameterLockMode()) {
+            Serial.print(" (Parameter Lock Mode)");
         }
         Serial.println();
+        
+        // Additional diagnostics for parameter lock debugging
+        if (pressed) {
+            Serial.print("DEBUG: Button press detected, current mode: ");
+            Serial.println(sequencer->isInParameterLockMode() ? "PARAM_LOCK" : "NORMAL");
+        }
     }
-    Serial.print("Current Step: "); Serial.println(sequencer.getCurrentStep());
-    Serial.print("Playing: "); Serial.println(sequencer.isPlaying() ? "YES" : "NO");
+    
+    lastButtonStates = currentButtonStates;
 }

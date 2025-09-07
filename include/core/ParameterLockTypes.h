@@ -2,6 +2,7 @@
 #define PARAMETER_LOCK_TYPES_H
 
 #include <stdint.h>
+#include <cstddef>
 #include "ParameterLockPool.h"
 
 /**

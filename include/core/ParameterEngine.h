@@ -2,6 +2,7 @@
 #define PARAMETER_ENGINE_H
 
 #include <stdint.h>
+#include <cstddef>
 #include "ParameterLockPool.h"
 #include "ParameterLockTypes.h"
 #include "IClock.h"

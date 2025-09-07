@@ -38,6 +38,8 @@ private:
     
     void initKeyMapping();
     bool getKeyMapping(int key, uint8_t& row, uint8_t& col);
+    bool determineKeyAction(int key);
+    bool isUpperCase(int key);
     void handleKeyPress(int key);
     void handleKeyRelease(int key);
 };

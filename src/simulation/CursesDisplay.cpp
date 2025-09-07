@@ -36,23 +36,26 @@ void CursesDisplay::init() {
     int termWidth;
     getmaxyx(stdscr, std::ignore, termWidth);
     
-    // LED display window (main area)
-    ledWindow_ = newwin(ROWS * 2 + 2, COLS * 4 + 2, 4, 2);
+    // LED display window (main area) - start at row 5 to accommodate extra instructions
+    ledWindow_ = newwin(ROWS * 2 + 2, COLS * 4 + 2, 5, 2);
     
-    // Info window (bottom)
-    infoWindow_ = newwin(6, termWidth - 4, ROWS * 2 + 8, 2);
+    // Info window (bottom) - increased height for parameter lock instructions
+    infoWindow_ = newwin(7, termWidth - 4, ROWS * 2 + 9, 2);
     
     // Draw borders
     box(ledWindow_, 0, 0);
     box(infoWindow_, 0, 0);
     
     // Title and instructions
-    mvprintw(0, 2, "NeoTrellis M4 Step Sequencer Simulator - 4x8 Grid");
+    mvprintw(0, 2, "NeoTrellis M4 Step Sequencer Simulator - 4x8 Grid with Parameter Locks");
     mvprintw(1, 2, "Step Sequencer: RED=Track0, GREEN=Track1, BLUE=Track2, YELLOW=Track3 | Press ESC to quit");
     
+    // Parameter lock instructions with new hold system
+    mvprintw(2, 2, "PARAMETER LOCKS: UPPERCASE=PRESS&HOLD (Q,A,Z,1), lowercase=RELEASE (q,a,z,!). Hold step for 500ms to enter param lock mode.");
+    mvprintw(3, 2, "In param lock mode: Use control grid buttons to adjust NOTE/VELOCITY/LENGTH. Release step to exit.");
+    
     // Shift-key control legend
-    mvprintw(2, 2, "SHIFT CONTROLS: [Hold Z] + [,] = Start/Stop | Shift key = [Z] (bottom-left) | Play/Stop key = [,] (bottom-right)");
-    mvprintw(3, 2, "When stopped, playhead resets to beginning (position 0)");
+    mvprintw(4, 2, "SHIFT CONTROLS: [Hold Z] + [,] = Start/Stop | When stopped, playhead resets to beginning");
     
     initialized_ = true;
     drawGrid();
@@ -187,9 +190,10 @@ void CursesDisplay::drawInfo() {
     werase(infoWindow_);
     box(infoWindow_, 0, 0);
     
-    // Keyboard mapping and usage info
+    // Keyboard mapping and parameter lock usage info
     mvwprintw(infoWindow_, 1, 2, "Controls: Press keys to toggle steps on/off. Bright colors = current playback position");
     mvwprintw(infoWindow_, 2, 2, "Track 0 (RED):    1 2 3 4 5 6 7 8    |  Track 1 (GREEN):  Q W E R T Y U I");
     mvwprintw(infoWindow_, 3, 2, "Track 2 (BLUE):   A S D F G H J K    |  Track 3 (YELLOW): Z X C V B N M ,");
-    mvwprintw(infoWindow_, 4, 2, "Sequencer is playing at 120 BPM with a demo pattern. Modify it!");
+    mvwprintw(infoWindow_, 4, 2, "PARAMETER LOCKS: Hold any step key for 500ms → Control grid appears on opposite side");
+    mvwprintw(infoWindow_, 5, 2, "Example: Hold '1' (step 0) → use keys 5678 TYUI to adjust note/velocity/length");
 }

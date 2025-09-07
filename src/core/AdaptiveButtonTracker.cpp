@@ -1,4 +1,4 @@
-#include "core/AdaptiveButtonTracker.h"
+#include "AdaptiveButtonTracker.h"
 #include <algorithm>  // For std::min, std::max
 
 AdaptiveButtonTracker::AdaptiveButtonTracker()
@@ -151,6 +151,12 @@ void AdaptiveButtonTracker::forceButtonState(uint8_t button, bool pressed, uint3
     if (!isValidButton(button)) return;
     
     updateButtonState(button, pressed, currentTime);
+}
+
+void AdaptiveButtonTracker::markHoldProcessed(uint8_t button) {
+    if (!isValidButton(button)) return;
+    
+    states_[button].holdProcessed = true;
 }
 
 void AdaptiveButtonTracker::updateButtonState(uint8_t button, bool pressed, uint32_t currentTime) {

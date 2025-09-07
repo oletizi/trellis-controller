@@ -35,6 +35,9 @@ public:
         // Initialize step sequencer with dependencies
         StepSequencer::Dependencies deps;
         deps.clock = clock_.get();
+        deps.display = display_.get();
+        deps.input = input_.get();
+        // Note: midiOutput and midiInput are nullptr for simulation
         sequencer_ = std::make_unique<StepSequencer>(deps);
         
         // Initialize shift controls
@@ -145,7 +148,16 @@ private:
                 return;
             }
             
-            // Handle shift controls first
+            // Convert row/col to button index for parameter lock system
+            if (event.row < 4 && event.col < 8) {
+                uint8_t buttonIndex = event.row * 8 + event.col;
+                uint32_t currentTime = clock_->getCurrentTime();
+                
+                // Use StepSequencer's parameter lock button handling
+                sequencer_->handleButton(buttonIndex, event.pressed, currentTime);
+            }
+            
+            // Handle shift controls first (for legacy compatibility)
             if (shiftControls_->shouldHandleAsControl(event.row, event.col)) {
                 shiftControls_->handleShiftInput(event);
                 
@@ -163,10 +175,6 @@ private:
                 // Update shift key visual feedback
                 updateShiftVisualFeedback();
             }
-            // Handle normal button presses to toggle steps (only when not a control key)
-            else if (event.pressed && event.row < 4 && event.col < 8) {
-                sequencer_->toggleStep(event.row, event.col);
-            }
         }
     }
     
@@ -174,36 +182,10 @@ private:
         // Clear display
         display_->clear();
         
-        // Get current step for highlighting
-        uint8_t currentStep = sequencer_->getCurrentStep();
-        bool isPlaying = sequencer_->isPlaying();
+        // Let StepSequencer handle its own display updates (including parameter locks)
+        sequencer_->updateDisplay();
         
-        // Update LED states based on sequencer pattern
-        for (uint8_t track = 0; track < 4; track++) {
-            for (uint8_t step = 0; step < 8; step++) {
-                bool stepActive = sequencer_->isStepActive(track, step);
-                bool isCurrentStep = (step == currentStep && isPlaying);
-                
-                uint8_t r = 0, g = 0, b = 0;
-                
-                if (stepActive) {
-                    // Different colors for different tracks
-                    switch (track) {
-                        case 0: r = isCurrentStep ? 255 : 128; break;  // Red
-                        case 1: g = isCurrentStep ? 255 : 128; break;  // Green  
-                        case 2: b = isCurrentStep ? 255 : 128; break;  // Blue
-                        case 3: r = g = isCurrentStep ? 255 : 128; break; // Yellow
-                    }
-                } else if (isCurrentStep) {
-                    // Dim white for current step when not active
-                    r = g = b = 32;
-                }
-                
-                display_->setLED(track, step, r, g, b);
-            }
-        }
-        
-        // Add shift-key visual feedback
+        // Add shift-key visual feedback (legacy)
         updateShiftVisualFeedback();
         
         display_->refresh();

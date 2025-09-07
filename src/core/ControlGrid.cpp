@@ -1,4 +1,4 @@
-#include "core/ControlGrid.h"
+#include "ControlGrid.h"
 #include <cmath>
 #include <algorithm>
 

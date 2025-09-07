@@ -1,5 +1,6 @@
-#include "core/StepSequencer.h"
+#include "StepSequencer.h"
 #include <cstring>
+#include <algorithm>
 
 StepSequencer::StepSequencer()
     : bpm_(120)
@@ -59,7 +60,7 @@ void StepSequencer::init(uint16_t bpm, uint8_t steps) {
 }
 
 void StepSequencer::tick() {
-    uint32_t currentTime = clock_ ? clock_->millis() : 0;
+    uint32_t currentTime = clock_ ? clock_->getCurrentTime() : 0;
     
     // Update parameter lock system
     if (currentTime != lastUpdateTime_) {
@@ -85,7 +86,7 @@ void StepSequencer::tick() {
 
 void StepSequencer::start() {
     playing_ = true;
-    lastStepTime_ = clock_ ? clock_->millis() : 0;
+    lastStepTime_ = clock_ ? clock_->getCurrentTime() : 0;
     
     if (midiOutput_) {
         midiOutput_->sendStart();
@@ -103,7 +104,7 @@ void StepSequencer::stop() {
 void StepSequencer::reset() {
     currentStep_ = 0;
     tickCounter_ = 0;
-    lastStepTime_ = clock_ ? clock_->millis() : 0;
+    lastStepTime_ = clock_ ? clock_->getCurrentTime() : 0;
 }
 
 void StepSequencer::toggleStep(uint8_t track, uint8_t step) {
@@ -399,11 +400,23 @@ void StepSequencer::handleNormalModeButton(uint8_t button, bool pressed) {
 void StepSequencer::handleParameterLockInput(uint8_t button, bool pressed) {
     if (!pressed) return;
     
+    #ifndef ARDUINO
+    fprintf(stderr, "PARAM_LOCK: handleParameterLockInput called for button %d\n", button);
+    #endif
+    
     const auto& context = stateManager_.getParameterLockContext();
     ControlGrid::ControlMapping mapping = controlGrid_.getMapping(context.heldStep, context.heldTrack);
     
+    #ifndef ARDUINO
+    fprintf(stderr, "PARAM_LOCK: Control grid mapping valid=%d, heldStep=%d, heldTrack=%d\n", 
+            mapping.isValid, context.heldStep, context.heldTrack);
+    #endif
+    
     if (!mapping.isInControlArea(button)) {
         // Button outside control area - exit parameter lock mode
+        #ifndef ARDUINO
+        fprintf(stderr, "PARAM_LOCK: Button %d outside control area, exiting parameter lock mode\n", button);
+        #endif
         exitParameterLockMode();
         return;
     }
@@ -412,7 +425,14 @@ void StepSequencer::handleParameterLockInput(uint8_t button, bool pressed) {
     ParameterLockPool::ParameterType paramType = controlGrid_.getParameterType(button, mapping);
     int8_t adjustment = controlGrid_.getParameterAdjustment(button, mapping);
     
+    #ifndef ARDUINO
+    fprintf(stderr, "PARAM_LOCK: Button %d -> paramType=%d, adjustment=%d\n", button, (int)paramType, adjustment);
+    #endif
+    
     if (paramType != ParameterLockPool::ParameterType::NONE && adjustment != 0) {
+        #ifndef ARDUINO
+        fprintf(stderr, "PARAM_LOCK: Calling adjustParameter with type %d, delta %d\n", (int)paramType, adjustment);
+        #endif
         adjustParameter(paramType, adjustment);
     }
 }
@@ -488,7 +508,7 @@ void StepSequencer::checkForHoldEvents() {
         if (buttonState.isHeld && !buttonState.holdProcessed) {
             uint8_t track, step;
             if (buttonToTrackStep(button, track, step)) {
-                // DEBUG: Add some serial output
+                // DEBUG: Add some debug output for both Arduino and simulation
                 #ifdef ARDUINO
                 Serial.print("DEBUG: Hold detected for button ");
                 Serial.print(button);
@@ -497,16 +517,24 @@ void StepSequencer::checkForHoldEvents() {
                 Serial.print(", step ");
                 Serial.print(step);
                 Serial.println(")");
+                #else
+                // Simulation debug - will appear in stderr
+                fprintf(stderr, "PARAM_LOCK: Hold detected for button %d (track %d, step %d)\n", button, track, step);
                 #endif
                 
                 // Enter parameter lock mode
                 if (enterParameterLockMode(track, step)) {
                     #ifdef ARDUINO
                     Serial.println("DEBUG: Successfully entered parameter lock mode");
+                    #else
+                    fprintf(stderr, "PARAM_LOCK: Successfully entered parameter lock mode\n");
                     #endif
                     // Mark hold as processed to avoid multiple entries
-                    // Note: We need to mark this in the button tracker
-                    // For now, rely on state manager to prevent duplicate entries
+                    buttonTracker_.markHoldProcessed(button);
+                } else {
+                    #ifndef ARDUINO
+                    fprintf(stderr, "PARAM_LOCK: Failed to enter parameter lock mode\n");
+                    #endif
                 }
             }
         }

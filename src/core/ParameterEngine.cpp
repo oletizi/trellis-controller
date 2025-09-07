@@ -1,4 +1,4 @@
-#include "core/ParameterEngine.h"
+#include "ParameterEngine.h"
 #include <algorithm>
 #include <cstring>
 
@@ -281,7 +281,7 @@ void ParameterEngine::updateStats(uint32_t calcTime) {
 
 uint32_t ParameterEngine::getCurrentTime() const {
     if (clock_) {
-        return clock_->millis();
+        return clock_->getCurrentTime();
     }
     
     // No clock available - return 0
@@ -307,7 +307,7 @@ uint32_t ParameterEngine::measureTime(uint32_t startTime) const {
     if (clock_) {
         // Convert milliseconds to microseconds
         // In real implementation, would use microsecond timer
-        uint32_t endTime = clock_->millis();
+        uint32_t endTime = clock_->getCurrentTime();
         return (endTime - startTime) * 1000;  // Rough approximation
     }
     

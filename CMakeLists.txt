@@ -19,6 +19,11 @@ option(BUILD_TESTS "Build unit tests for host platform" OFF)
 set(CORE_SOURCES
     ${CMAKE_SOURCE_DIR}/src/core/StepSequencer.cpp
     ${CMAKE_SOURCE_DIR}/src/core/ShiftControls.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/ParameterLockPool.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/SequencerStateManager.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/ParameterEngine.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/ControlGrid.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/AdaptiveButtonTracker.cpp
 )
 
 if(BUILD_TESTS)

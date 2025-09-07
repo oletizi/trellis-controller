@@ -2,6 +2,7 @@
 #define PARAMETER_LOCK_POOL_H
 
 #include <stdint.h>
+#include <cstddef>
 
 /**
  * Memory pool for parameter locks with O(1) allocation/deallocation.

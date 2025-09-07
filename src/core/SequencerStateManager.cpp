@@ -1,4 +1,4 @@
-#include "core/SequencerStateManager.h"
+#include "SequencerStateManager.h"
 
 // Mode transition matrix - defines which transitions are allowed
 // Rows are current modes, columns are target modes

@@ -219,6 +219,12 @@ public:
      * @param currentTime Current time
      */
     void forceButtonState(uint8_t button, bool pressed, uint32_t currentTime);
+    
+    /**
+     * Mark button hold as processed (to prevent multiple hold events)
+     * @param button Button index (0-31)
+     */
+    void markHoldProcessed(uint8_t button);
 
 private:
     ButtonState states_[MAX_BUTTONS];      // Button state tracking

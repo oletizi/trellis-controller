@@ -416,15 +416,38 @@ void StepSequencer::handleNormalModeButton(uint8_t button, bool pressed) {
 }
 
 void StepSequencer::handleParameterLockInput(uint8_t button, bool pressed) {
-    // BUG FIX: Only process button presses for parameter adjustment
-    // Don't exit on button releases - only exit when the held step is released
-    if (!pressed) return;
+    // CRITICAL FIX: Handle both button presses and releases properly
+    // Only exit when the held step button is released, not control buttons
     
     #ifndef ARDUINO
     fprintf(stderr, "PARAM_LOCK: handleParameterLockInput called for button %d (pressed=%d)\n", button, pressed);
     #endif
     
     const auto& context = stateManager_.getParameterLockContext();
+    uint8_t heldButton = context.heldTrack * 8 + context.heldStep;
+    
+    // Check if this is the held step button
+    if (button == heldButton) {
+        if (!pressed) {
+            // Held step button released - exit parameter lock mode
+            #ifndef ARDUINO
+            fprintf(stderr, "PARAM_LOCK: Held step button %d released, exiting parameter lock mode\n", button);
+            #endif
+            stateManager_.exitParameterLockMode();
+        }
+        // Don't process held step presses/releases as control inputs
+        return;
+    }
+    
+    // For control buttons, only process presses (not releases)
+    if (!pressed) {
+        #ifndef ARDUINO
+        fprintf(stderr, "PARAM_LOCK: Control button %d released, ignoring\n", button);
+        #endif
+        return;
+    }
+    
+    // Get control grid mapping
     ControlGrid::ControlMapping mapping = controlGrid_.getMapping(context.heldStep, context.heldTrack);
     
     #ifndef ARDUINO
@@ -432,10 +455,8 @@ void StepSequencer::handleParameterLockInput(uint8_t button, bool pressed) {
             mapping.isValid, context.heldStep, context.heldTrack);
     #endif
     
-    // BUG FIX: Don't exit parameter lock mode when pressing control buttons
-    // Only check if it's in control area for parameter adjustment
+    // Check if button is in control area
     if (!mapping.isInControlArea(button)) {
-        // Button outside control area - ignore it, don't exit
         #ifndef ARDUINO
         fprintf(stderr, "PARAM_LOCK: Button %d outside control area, ignoring\n", button);
         #endif
@@ -450,13 +471,12 @@ void StepSequencer::handleParameterLockInput(uint8_t button, bool pressed) {
     fprintf(stderr, "PARAM_LOCK: Button %d -> paramType=%d, adjustment=%d\n", button, (int)paramType, adjustment);
     #endif
     
-    // BUG FIX #4: Ensure proper routing to adjustParameter() method
+    // Apply parameter adjustment
     if (paramType != ParameterLockPool::ParameterType::NONE && adjustment != 0) {
         #ifndef ARDUINO
         fprintf(stderr, "PARAM_LOCK: Calling adjustParameter with type %d, delta %d\n", (int)paramType, adjustment);
         #endif
         
-        // Call adjustParameter and verify success
         bool success = adjustParameter(paramType, adjustment);
         
         #ifndef ARDUINO

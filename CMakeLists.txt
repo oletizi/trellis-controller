@@ -119,7 +119,7 @@ elseif(BUILD_SIMULATION)
     set(SIMULATION_SOURCES
         ${CMAKE_SOURCE_DIR}/src/simulation/CursesDisplay.cpp
         ${CMAKE_SOURCE_DIR}/src/simulation/CursesInput.cpp
-        ${CMAKE_SOURCE_DIR}/src/simulation/main.cpp
+        ${CMAKE_SOURCE_DIR}/src/simulation/main_simple.cpp
         ${CMAKE_SOURCE_DIR}/src/core/NonRealtimeSequencer.cpp
     )
     

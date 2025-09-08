@@ -17,15 +17,15 @@ class AdaptiveButtonTracker;
 namespace JsonState {
     
     /**
-     * Step state representation
+     * Step state representation for JSON serialization
      */
-    struct StepData {
+    struct JsonStepData {
         bool active = false;
         bool hasLock = false;
         uint8_t lockIndex = 255;
         
         // JSON serialization
-        NLOHMANN_DEFINE_TYPE_INTRUSIVE(StepData, active, hasLock, lockIndex)
+        NLOHMANN_DEFINE_TYPE_INTRUSIVE(JsonStepData, active, hasLock, lockIndex)
     };
     
     /**
@@ -112,7 +112,7 @@ namespace JsonState {
         std::string timestamp;
         
         SequencerCore sequencer;
-        StepData pattern[4][8];
+        JsonStepData pattern[4][8];
         ParameterLock parameterLocks[64];
         ButtonState buttons[32];
         ParameterLockMode parameterLockMode;

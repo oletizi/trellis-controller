@@ -630,3 +630,62 @@ void StepSequencer::checkForHoldRelease() {
         return;
     }
 }
+
+// State restore methods for JSON serialization
+void StepSequencer::restorePatternData(const PatternData& pattern) {
+    // Use memcpy for direct memory copy of the pattern array
+    memcpy(patternData_, pattern, sizeof(PatternData));
+}
+
+void StepSequencer::restoreTrackDefaults(const TrackDefaults defaults[MAX_TRACKS]) {
+    // Copy track defaults
+    for (uint8_t i = 0; i < MAX_TRACKS; ++i) {
+        trackDefaults_[i] = defaults[i];
+        // Update legacy arrays for compatibility
+        trackVolumes_[i] = defaults[i].volume;
+        trackMutes_[i] = defaults[i].muted;
+        trackMidiNotes_[i] = defaults[i].note;
+        trackMidiChannels_[i] = defaults[i].channel;
+    }
+}
+
+void StepSequencer::restoreLockPool(const ParameterLockPool& pool) {
+    // Clear existing locks
+    lockPool_.clearAll();
+    
+    // Reconstruct locks from snapshot data
+    // Note: This is a simplified restoration that recreates locks
+    // but may not preserve internal pool state perfectly
+    for (uint8_t i = 0; i < ParameterLockPool::MAX_LOCKS; ++i) {
+        if (pool.isValidIndex(i)) {
+            const auto& srcLock = pool.getLock(i);
+            if (srcLock.inUse && srcLock.isValid()) {
+                uint8_t newIndex = lockPool_.allocate(srcLock.trackIndex, srcLock.stepIndex);
+                if (newIndex != ParameterLockPool::INVALID_INDEX) {
+                    auto& destLock = lockPool_.getLock(newIndex);
+                    destLock.activeLocks = srcLock.activeLocks;
+                    destLock.noteOffset = srcLock.noteOffset;
+                    destLock.velocity = srcLock.velocity;
+                    destLock.length = srcLock.length;
+                    // trackIndex and stepIndex are already set by allocate()
+                }
+            }
+        }
+    }
+}
+
+void StepSequencer::restoreButtonTracker(const AdaptiveButtonTracker& tracker) {
+    // Note: Button tracker restoration is limited by the current interface
+    // The timing-sensitive state (press times, hold durations) may not be
+    // perfectly restorable, but for testing purposes, the basic pressed state
+    // is sufficient. In a full implementation, AdaptiveButtonTracker would need
+    // a dedicated restoration interface.
+    buttonTracker_ = tracker;
+}
+
+void StepSequencer::restoreStateManager(const SequencerStateManager& manager) {
+    // Note: State manager restoration may not perfectly restore timing-based
+    // state like hold start times. For testing, the mode and parameter lock
+    // context is the most important state to restore.
+    stateManager_ = manager;
+}

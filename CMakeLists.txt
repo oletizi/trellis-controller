@@ -47,29 +47,45 @@ if(BUILD_TESTS)
         ${CMAKE_SOURCE_DIR}/test
     )
     
-    # Test sources
-    file(GLOB_RECURSE TEST_SOURCES 
+    # Test sources (exclude the parameter lock test harness for general tests)
+    file(GLOB_RECURSE ALL_TEST_SOURCES 
         ${CMAKE_SOURCE_DIR}/test/*.cpp
     )
+    
+    # Separate parameter lock test from other tests
+    list(REMOVE_ITEM ALL_TEST_SOURCES "${CMAKE_SOURCE_DIR}/test/test_parameter_locks.cpp")
+    set(TEST_SOURCES ${ALL_TEST_SOURCES})
     
     # Find Catch2
     find_package(Catch2 3 REQUIRED)
     
-    # Create test executable
+    # Create main test executable (existing tests)
     add_executable(run_tests ${TEST_SOURCES} ${CORE_SOURCES})
-    
-    # Link with Catch2
     target_link_libraries(run_tests PRIVATE Catch2::Catch2WithMain)
-    
-    # Add test target
     add_test(NAME UnitTests COMMAND run_tests)
+    
+    # Create dedicated Parameter Lock test executable
+    add_executable(test_parameter_locks 
+        ${CMAKE_SOURCE_DIR}/test/test_parameter_locks.cpp 
+        ${CORE_SOURCES}
+        ${CMAKE_SOURCE_DIR}/src/core/NonRealtimeSequencer.cpp
+    )
+    target_link_libraries(test_parameter_locks PRIVATE Catch2::Catch2)
+    add_test(NAME ParameterLockTests COMMAND test_parameter_locks)
+    
+    # Add standalone target for parameter lock tests (runs without Catch2)
+    add_custom_target(test-parameter-locks-standalone
+        COMMAND test_parameter_locks --standalone
+        DEPENDS test_parameter_locks
+        COMMENT "Running parameter lock tests in standalone mode"
+    )
     
     # Coverage targets
     add_custom_target(coverage
         COMMAND lcov --directory . --capture --output-file coverage.info
         COMMAND lcov --remove coverage.info '/usr/*' '${CMAKE_SOURCE_DIR}/test/*' --output-file coverage.info
         COMMAND genhtml coverage.info --output-directory coverage_html
-        DEPENDS run_tests
+        DEPENDS run_tests test_parameter_locks
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         COMMENT "Generating coverage report"
     )
@@ -99,11 +115,12 @@ elseif(BUILD_SIMULATION)
         ${CMAKE_SOURCE_DIR}/include/simulation
     )
     
-    # Simulation sources
+    # Simulation sources (includes testing-only files)
     set(SIMULATION_SOURCES
         ${CMAKE_SOURCE_DIR}/src/simulation/CursesDisplay.cpp
         ${CMAKE_SOURCE_DIR}/src/simulation/CursesInput.cpp
         ${CMAKE_SOURCE_DIR}/src/simulation/main.cpp
+        ${CMAKE_SOURCE_DIR}/src/core/NonRealtimeSequencer.cpp
     )
     
     # Create simulation executable

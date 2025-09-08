@@ -4,7 +4,8 @@
 #include "StepSequencer.h"
 #include "ControlMessage.h"
 #include "SequencerState.h"
-#include "SystemClock.h"
+#include "IClock.h"
+#include "JsonState.h"
 #include <vector>
 #include <queue>
 #include <memory>
@@ -143,8 +144,7 @@ public:
     
 private:
     std::unique_ptr<StepSequencer> sequencer_;
-    std::unique_ptr<SystemClock> clock_;
-    std::unique_ptr<SequencerState> stateManager_;
+    std::unique_ptr<IClock> clock_;
     
     // Mock interfaces for non-realtime operation
     class NullMidiOutput;
@@ -166,7 +166,7 @@ private:
     /**
      * Log a message if logging is enabled
      */
-    void log(const std::string& message);
+    void log(const std::string& message) const;
     
     /**
      * Process key press/release message
@@ -201,30 +201,49 @@ private:
     /**
      * Create state directory if it doesn't exist
      */
-    void ensureStateDirectory();
+    void ensureStateDirectory() const;
+    
+    /**
+     * Convert JsonState::Snapshot to SequencerState::Snapshot
+     */
+    SequencerState::Snapshot convertJsonStateToSequencerState(const JsonState::Snapshot& jsonSnapshot) const;
     
 private:
     // Null implementations for non-realtime operation
     class NullMidiOutput : public IMidiOutput {
     public:
-        void sendNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) override {}
-        void sendNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) override {}
+        void sendNoteOn(uint8_t, uint8_t, uint8_t) override {}
+        void sendNoteOff(uint8_t, uint8_t, uint8_t) override {}
+        void sendControlChange(uint8_t, uint8_t, uint8_t) override {}
+        void sendProgramChange(uint8_t, uint8_t) override {}
+        void sendClock() override {}
         void sendStart() override {}
         void sendStop() override {}
-        void sendClock() override {}
-        void sendControlChange(uint8_t channel, uint8_t controller, uint8_t value) override {}
+        void sendContinue() override {}
+        bool isConnected() const override { return true; }
+        void flush() override {}
     };
     
     class NullDisplay : public IDisplay {
     public:
-        void setPixel(uint8_t index, uint32_t color) override {}
-        void show() override {}
-        void setBrightness(uint8_t brightness) override {}
+        void init() override {}
+        void shutdown() override {}
+        void setLED(uint8_t, uint8_t, uint8_t, uint8_t, uint8_t) override {}
+        void clear() override {}
+        void refresh() override {}
+        uint8_t getRows() const override { return 4; }
+        uint8_t getCols() const override { return 8; }
     };
     
     class NullInput : public IInput {
     public:
-        // No methods to implement - input is driven by control messages
+        void init() override {}
+        void shutdown() override {}
+        bool pollEvents() override { return false; }
+        bool getNextEvent(ButtonEvent&) override { return false; }
+        bool isButtonPressed(uint8_t, uint8_t) const override { return false; }
+        uint8_t getRows() const override { return 4; }
+        uint8_t getCols() const override { return 8; }
     };
 };
 

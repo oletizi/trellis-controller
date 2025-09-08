@@ -82,6 +82,27 @@ public:
     uint32_t getTickCounter() const { return tickCounter_; }
     uint32_t getTicksPerStep() const { return ticksPerStep_; }
     
+    // State access for capture/restore
+    uint8_t getStepCount() const { return stepCount_; }
+    uint32_t getLastStepTime() const { return lastStepTime_; }
+    const PatternData& getPatternData() const { return patternData_; }
+    const TrackDefaults* getTrackDefaults() const { return trackDefaults_; }
+    const ParameterLockPool& getLockPool() const { return lockPool_; }
+    const AdaptiveButtonTracker& getButtonTracker() const { return buttonTracker_; }
+    const SequencerStateManager& getStateManager() const { return stateManager_; }
+    
+    // State mutators for restore
+    void setStepCount(uint8_t steps) { stepCount_ = (steps > MAX_STEPS) ? MAX_STEPS : steps; }
+    void setCurrentStep(uint8_t step) { currentStep_ = (step < MAX_STEPS) ? step : 0; }
+    void setPlaying(bool playing) { playing_ = playing; }
+    void setTickCounter(uint32_t counter) { tickCounter_ = counter; }
+    void setLastStepTime(uint32_t time) { lastStepTime_ = time; }
+    void restorePatternData(const PatternData& pattern);
+    void restoreTrackDefaults(const TrackDefaults defaults[MAX_TRACKS]);
+    void restoreLockPool(const ParameterLockPool& pool);
+    void restoreButtonTracker(const AdaptiveButtonTracker& tracker);
+    void restoreStateManager(const SequencerStateManager& manager);
+    
 private:
     // Pattern data with parameter lock support
     PatternData patternData_;

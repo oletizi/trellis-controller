@@ -5,7 +5,7 @@
 #include <tuple>
 
 CursesDisplay::CursesDisplay() 
-    : initialized_(false), ledWindow_(nullptr), infoWindow_(nullptr) {
+    : initialized_(false), ledWindow_(nullptr), infoWindow_(nullptr), consoleWindow_(nullptr) {
     clear();
 }
 
@@ -39,27 +39,35 @@ void CursesDisplay::init() {
     // LED display window (main area) - start at row 5 to accommodate extra instructions
     ledWindow_ = newwin(ROWS * 2 + 2, COLS * 4 + 2, 5, 2);
     
-    // Info window (bottom) - increased height for parameter lock instructions
+    // Info window (middle) - instructions
     infoWindow_ = newwin(7, termWidth - 4, ROWS * 2 + 9, 2);
+    
+    // Console window (bottom) - debug output
+    consoleWindow_ = newwin(MAX_CONSOLE_LINES + 2, termWidth - 4, ROWS * 2 + 17, 2);
     
     // Draw borders
     box(ledWindow_, 0, 0);
     box(infoWindow_, 0, 0);
+    box(consoleWindow_, 0, 0);
+    
+    // Console window title
+    mvwprintw(consoleWindow_, 0, 2, " Debug Console ");
     
     // Title and instructions
     mvprintw(0, 2, "NeoTrellis M4 Step Sequencer Simulator - 4x8 Grid with Parameter Locks");
     mvprintw(1, 2, "Step Sequencer: RED=Track0, GREEN=Track1, BLUE=Track2, YELLOW=Track3 | Press ESC to quit");
     
-    // Parameter lock instructions with new hold system
-    mvprintw(2, 2, "PARAMETER LOCKS: UPPERCASE=PRESS&HOLD (Q,A,Z,1), lowercase=RELEASE (q,a,z,!). Hold step for 500ms to enter param lock mode.");
-    mvprintw(3, 2, "In param lock mode: Use control grid buttons to adjust NOTE/VELOCITY/LENGTH. Release step to exit.");
+    // Updated instructions with hold capability
+    mvprintw(2, 2, "CONTROLS: lowercase/numbers=toggle, UPPERCASE=hold (for parameter locks)");
+    mvprintw(3, 2, "Track 0 (RED): 1 2 3 4 5 6 7 8 | Track 1 (GREEN): Q W E R T Y U I");
     
-    // Shift-key control legend
-    mvprintw(4, 2, "SHIFT CONTROLS: [Hold Z] + [,] = Start/Stop | When stopped, playhead resets to beginning");
+    // Shift-key control legend and mode info  
+    mvprintw(4, 2, "Track 2 (BLUE): A S D F G H J K | Track 3 (YELLOW): Z X C V B N M ,");
     
     initialized_ = true;
     drawGrid();
     drawInfo();
+    drawConsole();
     refresh();
 }
 
@@ -74,6 +82,11 @@ void CursesDisplay::shutdown() {
     if (infoWindow_) {
         delwin(infoWindow_);
         infoWindow_ = nullptr;
+    }
+    
+    if (consoleWindow_) {
+        delwin(consoleWindow_);
+        consoleWindow_ = nullptr;
     }
     
     endwin();
@@ -153,10 +166,12 @@ void CursesDisplay::refresh() {
     if (!initialized_) return;
     
     drawGrid();
+    drawConsole();
     
     // Refresh all windows
     wrefresh(ledWindow_);
     wrefresh(infoWindow_);
+    wrefresh(consoleWindow_);
     ::refresh();
 }
 
@@ -190,10 +205,50 @@ void CursesDisplay::drawInfo() {
     werase(infoWindow_);
     box(infoWindow_, 0, 0);
     
-    // Keyboard mapping and parameter lock usage info
-    mvwprintw(infoWindow_, 1, 2, "Controls: Press keys to toggle steps on/off. Bright colors = current playback position");
-    mvwprintw(infoWindow_, 2, 2, "Track 0 (RED):    1 2 3 4 5 6 7 8    |  Track 1 (GREEN):  Q W E R T Y U I");
-    mvwprintw(infoWindow_, 3, 2, "Track 2 (BLUE):   A S D F G H J K    |  Track 3 (YELLOW): Z X C V B N M ,");
-    mvwprintw(infoWindow_, 4, 2, "PARAMETER LOCKS: Hold any step key for 500ms → Control grid appears on opposite side");
-    mvwprintw(infoWindow_, 5, 2, "Example: Hold '1' (step 0) → use keys 5678 TYUI to adjust note/velocity/length");
+    // Updated keyboard mapping with hold capability
+    mvwprintw(infoWindow_, 1, 2, "CONTROLS: lowercase/numbers=toggle step, UPPERCASE=hold step (parameter locks)");
+    mvwprintw(infoWindow_, 2, 2, "Track 0 (RED):    1 2 3 4 5 6 7 8    |  Track 1 (GREEN):  q w e r t y u i");  
+    mvwprintw(infoWindow_, 3, 2, "Track 2 (BLUE):   a s d f g h j k    |  Track 3 (YELLOW): z x c v b n m ,");
+    mvwprintw(infoWindow_, 4, 2, "PARAMETER LOCKS: Hold UPPERCASE key (Q,A,Z,1) to enter param lock mode");
+    mvwprintw(infoWindow_, 5, 2, "Example: Hold 'Q' → control grid appears → press lowercase 'q' to release");
+}
+
+void CursesDisplay::addConsoleMessage(const std::string& message) {
+    consoleMessages_.push_back(message);
+    
+    // Keep only the last MAX_CONSOLE_LINES messages
+    while (consoleMessages_.size() > MAX_CONSOLE_LINES) {
+        consoleMessages_.pop_front();
+    }
+    
+    // Redraw console if initialized
+    if (initialized_) {
+        drawConsole();
+        wrefresh(consoleWindow_);
+    }
+}
+
+void CursesDisplay::clearConsole() {
+    consoleMessages_.clear();
+    if (initialized_) {
+        drawConsole();
+        wrefresh(consoleWindow_);
+    }
+}
+
+void CursesDisplay::drawConsole() {
+    if (!consoleWindow_) return;
+    
+    // Clear console area
+    werase(consoleWindow_);
+    box(consoleWindow_, 0, 0);
+    mvwprintw(consoleWindow_, 0, 2, " Debug Console ");
+    
+    // Draw messages
+    int row = 1;
+    for (const auto& message : consoleMessages_) {
+        if (row > MAX_CONSOLE_LINES) break;
+        mvwprintw(consoleWindow_, row, 2, "%s", message.c_str());
+        row++;
+    }
 }

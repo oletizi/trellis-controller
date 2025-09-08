@@ -1,6 +1,8 @@
 #include "StepSequencer.h"
 #include <cstring>
 #include <algorithm>
+#include <cstdarg>
+#include <cstdio>
 
 StepSequencer::StepSequencer()
     : bpm_(120)
@@ -38,6 +40,7 @@ StepSequencer::StepSequencer(Dependencies deps)
     , midiInput_(deps.midiInput)
     , display_(deps.display)
     , input_(deps.input)
+    , debugOutput_(deps.debugOutput)
     , ownsClock_(false)
     , paramEngine_(&lockPool_, deps.clock)
     , lastUpdateTime_(0) {
@@ -403,9 +406,7 @@ void StepSequencer::handleNormalModeButton(uint8_t button, bool pressed) {
     const auto& buttonState = buttonTracker_.getButtonState(button);
     if (buttonState.holdProcessed) {
         // This button was used for parameter lock, don't toggle
-        #ifndef ARDUINO
-        fprintf(stderr, "NORMAL_MODE: Button %d was used for parameter lock, skipping toggle\n", button);
-        #endif
+        debugLog("NORMAL_MODE: Button %d was used for parameter lock, skipping toggle", button);
         return;
     }
     
@@ -419,9 +420,7 @@ void StepSequencer::handleParameterLockInput(uint8_t button, bool pressed) {
     // CRITICAL FIX: Handle both button presses and releases properly
     // Only exit when the held step button is released, not control buttons
     
-    #ifndef ARDUINO
-    fprintf(stderr, "PARAM_LOCK: handleParameterLockInput called for button %d (pressed=%d)\n", button, pressed);
-    #endif
+    debugLog("PARAM_LOCK: handleParameterLockInput called for button %d (pressed=%d)", button, pressed);
     
     const auto& context = stateManager_.getParameterLockContext();
     uint8_t heldButton = context.heldTrack * 8 + context.heldStep;
@@ -430,9 +429,7 @@ void StepSequencer::handleParameterLockInput(uint8_t button, bool pressed) {
     if (button == heldButton) {
         if (!pressed) {
             // Held step button released - exit parameter lock mode
-            #ifndef ARDUINO
-            fprintf(stderr, "PARAM_LOCK: Held step button %d released, exiting parameter lock mode\n", button);
-            #endif
+            debugLog("PARAM_LOCK: Held step button %d released, exiting parameter lock mode", button);
             stateManager_.exitParameterLockMode();
         }
         // Don't process held step presses/releases as control inputs
@@ -441,25 +438,19 @@ void StepSequencer::handleParameterLockInput(uint8_t button, bool pressed) {
     
     // For control buttons, only process presses (not releases)
     if (!pressed) {
-        #ifndef ARDUINO
-        fprintf(stderr, "PARAM_LOCK: Control button %d released, ignoring\n", button);
-        #endif
+        debugLog("PARAM_LOCK: Control button %d released, ignoring", button);
         return;
     }
     
     // Get control grid mapping
     ControlGrid::ControlMapping mapping = controlGrid_.getMapping(context.heldStep, context.heldTrack);
     
-    #ifndef ARDUINO
-    fprintf(stderr, "PARAM_LOCK: Control grid mapping valid=%d, heldStep=%d, heldTrack=%d\n", 
+    debugLog("PARAM_LOCK: Control grid mapping valid=%d, heldStep=%d, heldTrack=%d", 
             mapping.isValid, context.heldStep, context.heldTrack);
-    #endif
     
     // Check if button is in control area
     if (!mapping.isInControlArea(button)) {
-        #ifndef ARDUINO
-        fprintf(stderr, "PARAM_LOCK: Button %d outside control area, ignoring\n", button);
-        #endif
+        debugLog("PARAM_LOCK: Button %d outside control area, ignoring", button);
         return;
     }
     
@@ -467,35 +458,21 @@ void StepSequencer::handleParameterLockInput(uint8_t button, bool pressed) {
     ParameterLockPool::ParameterType paramType = controlGrid_.getParameterType(button, mapping);
     int8_t adjustment = controlGrid_.getParameterAdjustment(button, mapping);
     
-    #ifndef ARDUINO
-    fprintf(stderr, "PARAM_LOCK: Button %d -> paramType=%d, adjustment=%d\n", button, (int)paramType, adjustment);
-    #endif
+    debugLog("PARAM_LOCK: Button %d -> paramType=%d, adjustment=%d", button, (int)paramType, adjustment);
     
     // Apply parameter adjustment
     if (paramType != ParameterLockPool::ParameterType::NONE && adjustment != 0) {
-        #ifndef ARDUINO
-        fprintf(stderr, "PARAM_LOCK: Calling adjustParameter with type %d, delta %d\n", (int)paramType, adjustment);
-        #endif
+        debugLog("PARAM_LOCK: Calling adjustParameter with type %d, delta %d", (int)paramType, adjustment);
         
         bool success = adjustParameter(paramType, adjustment);
         
-        #ifndef ARDUINO
         if (success) {
-            fprintf(stderr, "PARAM_LOCK: Parameter adjustment successful\n");
+            debugLog("PARAM_LOCK: Parameter adjustment successful");
         } else {
-            fprintf(stderr, "PARAM_LOCK: Parameter adjustment failed\n");
+            debugLog("PARAM_LOCK: Parameter adjustment failed");
         }
-        #else
-        if (success) {
-            Serial.println("DEBUG: Parameter adjustment successful");
-        } else {
-            Serial.println("DEBUG: Parameter adjustment failed");
-        }
-        #endif
     } else {
-        #ifndef ARDUINO
-        fprintf(stderr, "PARAM_LOCK: No parameter adjustment - paramType=%d, adjustment=%d\n", (int)paramType, adjustment);
-        #endif
+        debugLog("PARAM_LOCK: No parameter adjustment - paramType=%d, adjustment=%d", (int)paramType, adjustment);
     }
 }
 
@@ -529,10 +506,13 @@ void StepSequencer::updateVisualFeedback() {
         }
     } else {
         // Show normal sequencer state
+        // Track colors for inactive steps (dim)
+        uint32_t trackColors[4] = {0x200000, 0x002000, 0x000020, 0x202000}; // Dim red, green, blue, yellow
+        
         for (uint8_t track = 0; track < MAX_TRACKS; ++track) {
             for (uint8_t step = 0; step < MAX_STEPS; ++step) {
                 uint8_t button = track * 8 + step;
-                uint32_t color = 0;
+                uint32_t color = trackColors[track]; // Default to dim track color
                 
                 if (patternData_[track][step].active) {
                     if (step == currentStep_ && playing_) {
@@ -540,7 +520,9 @@ void StepSequencer::updateVisualFeedback() {
                     } else if (patternData_[track][step].hasLock) {
                         color = 0xFF8000; // Orange for steps with locks
                     } else {
-                        color = 0x00FF00; // Green for active steps
+                        // Bright track colors for active steps
+                        uint32_t brightColors[4] = {0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00}; // Red, green, blue, yellow
+                        color = brightColors[track];
                     }
                 }
                 
@@ -571,33 +553,16 @@ void StepSequencer::checkForHoldEvents() {
             uint8_t track, step;
             if (buttonToTrackStep(button, track, step)) {
                 // DEBUG: Add some debug output for both Arduino and simulation
-                #ifdef ARDUINO
-                Serial.print("DEBUG: Hold detected for button ");
-                Serial.print(button);
-                Serial.print(" (track ");
-                Serial.print(track);
-                Serial.print(", step ");
-                Serial.print(step);
-                Serial.println(")");
-                #else
-                // Simulation debug - will appear in stderr
-                fprintf(stderr, "PARAM_LOCK: Hold detected for button %d (track %d, step %d)\n", button, track, step);
-                #endif
+                debugLog("PARAM_LOCK: Hold detected for button %d (track %d, step %d)", button, track, step);
                 
                 // Enter parameter lock mode
                 auto result = stateManager_.enterParameterLockMode(track, step);
                 if (result == SequencerStateManager::TransitionResult::SUCCESS) {
-                    #ifdef ARDUINO
-                    Serial.println("DEBUG: Successfully entered parameter lock mode");
-                    #else
-                    fprintf(stderr, "PARAM_LOCK: Successfully entered parameter lock mode\n");
-                    #endif
+                    debugLog("PARAM_LOCK: Successfully entered parameter lock mode");
                     // Mark hold as processed to avoid multiple entries
                     buttonTracker_.markHoldProcessed(button);
                 } else {
-                    #ifndef ARDUINO
-                    fprintf(stderr, "PARAM_LOCK: Failed to enter parameter lock mode (result: %d)\n", static_cast<int>(result));
-                    #endif
+                    debugLog("PARAM_LOCK: Failed to enter parameter lock mode (result: %d)", static_cast<int>(result));
                 }
             }
         }
@@ -615,9 +580,7 @@ void StepSequencer::checkForHoldRelease() {
     
     // Validate button index
     if (heldButton >= 32) {
-        #ifndef ARDUINO
-        fprintf(stderr, "PARAM_LOCK: Invalid held button index %d, exiting parameter lock mode\n", heldButton);
-        #endif
+        debugLog("PARAM_LOCK: Invalid held button index %d, exiting parameter lock mode", heldButton);
         stateManager_.exitParameterLockMode();
         return;
     }
@@ -626,26 +589,14 @@ void StepSequencer::checkForHoldRelease() {
     
     // BUG FIX #3: Validate that held button is still actually pressed
     if (!buttonState.pressed) {
-        #ifndef ARDUINO
-        fprintf(stderr, "PARAM_LOCK: Held button %d released, exiting parameter lock mode\n", heldButton);
-        #else
-        Serial.print("DEBUG: Held button ");
-        Serial.print(heldButton);
-        Serial.println(" released, exiting parameter lock mode");
-        #endif
+        debugLog("PARAM_LOCK: Held button %d released, exiting parameter lock mode", heldButton);
         stateManager_.exitParameterLockMode();
         return;
     }
     
     // Additional validation: check if button was explicitly released this cycle
     if (buttonState.wasReleased) {
-        #ifndef ARDUINO
-        fprintf(stderr, "PARAM_LOCK: Held button %d was released this cycle, exiting parameter lock mode\n", heldButton);
-        #else
-        Serial.print("DEBUG: Held button ");
-        Serial.print(heldButton);
-        Serial.println(" was released this cycle, exiting parameter lock mode");
-        #endif
+        debugLog("PARAM_LOCK: Held button %d was released this cycle, exiting parameter lock mode", heldButton);
         stateManager_.exitParameterLockMode();
         return;
     }
@@ -708,4 +659,15 @@ void StepSequencer::restoreStateManager(const SequencerStateManager& manager) {
     // state like hold start times. For testing, the mode and parameter lock
     // context is the most important state to restore.
     stateManager_ = manager;
+}
+
+void StepSequencer::debugLog(const char* format, ...) {
+    if (debugOutput_) {
+        va_list args;
+        va_start(args, format);
+        char buffer[256];
+        vsnprintf(buffer, sizeof(buffer), format, args);
+        va_end(args);
+        debugOutput_->log(std::string(buffer));
+    }
 }

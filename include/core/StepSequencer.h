@@ -7,6 +7,7 @@
 #include "IMidiInput.h"
 #include "IDisplay.h"
 #include "IInput.h"
+#include "IDebugOutput.h"
 #include "ParameterLockPool.h"
 #include "ParameterLockTypes.h"
 #include "ParameterEngine.h"
@@ -25,6 +26,7 @@ public:
         IMidiInput* midiInput = nullptr;
         IDisplay* display = nullptr;
         IInput* input = nullptr;
+        IDebugOutput* debugOutput = nullptr;
     };
     
     StepSequencer();
@@ -130,6 +132,7 @@ private:
     IMidiInput* midiInput_;
     IDisplay* display_;
     IInput* input_;
+    IDebugOutput* debugOutput_;
     bool ownsClock_;
     
     // Parameter lock components
@@ -157,6 +160,7 @@ private:
     bool buttonToTrackStep(uint8_t button, uint8_t& track, uint8_t& step) const;
     void updateVisualFeedback();
     void sendMidiWithParameters(uint8_t track, const CalculatedParameters& params);
+    void debugLog(const char* format, ...);
 };
 
 #endif

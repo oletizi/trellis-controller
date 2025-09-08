@@ -19,17 +19,61 @@ This is a sophisticated embedded C++ project implementing a step sequencer for t
 
 ```cpp
 // Core interfaces (platform-agnostic)
-class IDisplay;     // LED/display abstraction
-class IInput;       // Button/input abstraction  
-class IClock;       // Timing abstraction
-class IMidiOutput;  // MIDI output abstraction
-class IMidiInput;   // MIDI input abstraction
+class IDisplay;       // LED/display abstraction
+class IInputLayer;    // Platform-agnostic input abstraction
+class IGestureDetector; // High-level gesture recognition
+class InputController; // Input processing coordinator
+class IClock;         // Timing abstraction
+class IMidiOutput;    // MIDI output abstraction
+class IMidiInput;     // MIDI input abstraction
 
 // Platform implementations
-CursesDisplay;      // Terminal-based simulation
-NeoTrellisDisplay;  // Hardware RGB LEDs
-ArduinoMidiOutput;  // Hardware USB MIDI
+CursesDisplay;        // Terminal-based simulation
+NeoTrellisDisplay;    // Hardware RGB LEDs
+CursesInputLayer;     // Desktop keyboard simulation  
+NeoTrellisInputLayer; // Hardware I2C button matrix
+MockInputLayer;       // Testing with programmable events
+ArduinoMidiOutput;    // Hardware USB MIDI
 ```
+
+### Input Layer Abstraction Architecture (v2.0)
+**Critical**: The input system uses sophisticated layered abstraction for complete separation of concerns:
+
+```cpp
+// Input Processing Pipeline:
+// InputLayer → InputEvents → GestureDetector → ControlMessages → Sequencer
+
+// 1. Platform-specific input layers
+class IInputLayer {
+    virtual bool poll() = 0;                    // Check hardware for events
+    virtual bool getNextEvent(InputEvent&) = 0; // Retrieve platform events
+    virtual bool hasEvents() const = 0;         // Non-blocking event check
+};
+
+// 2. Platform-agnostic gesture recognition
+class IGestureDetector {
+    virtual uint8_t processInputEvent(const InputEvent&, 
+                                     std::vector<ControlMessage>&) = 0;
+    virtual bool isInParameterLockMode() const = 0;
+};
+
+// 3. Coordinated input processing
+class InputController {
+    bool poll();                               // Process complete pipeline
+    bool getNextMessage(ControlMessage&);      // Semantic output messages
+};
+```
+
+#### Input Architecture Benefits:
+- **Platform Independence**: Same gesture logic works on hardware, simulation, testing
+- **Sophisticated Gestures**: Hold detection, parameter locks, timing-based recognition
+- **Semantic Interface**: StepSequencer receives `TOGGLE_STEP`, `ENTER_PARAM_LOCK` messages
+- **Real-time Safe**: No dynamic allocation, bounded execution time
+- **Testable**: MockInputLayer provides programmable event sequences
+
+#### Migration from Legacy IInput:
+- **Before**: `sequencer->handleButton(id, pressed, time)` (platform-coupled)  
+- **After**: `controller->poll(); controller->getNextMessage(msg); sequencer->processMessage(msg)` (semantic)
 
 ### Arduino Platform Guidelines
 **CRITICAL**: Arduino `.ino` files must remain as thin as possible and contain ONLY device-specific translation code:

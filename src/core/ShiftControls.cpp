@@ -1,13 +1,6 @@
 #include "ShiftControls.h"
 
-#ifdef __SAMD51J19A__
-    #include "string.h"
-    extern "C" {
-        void* memset(void* dest, int val, uint32_t len);
-    }
-#else
-    #include <cstring>
-#endif
+#include <string.h>
 
 class DefaultClock : public IClock {
 public:

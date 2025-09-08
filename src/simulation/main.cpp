@@ -1,3 +1,30 @@
+/*
+ * Trellis Controller Simulation
+ * 
+ * ARCHITECTURAL NOTE: Proper Dependency Injection Pattern (Phase 3.2)
+ * 
+ * The correct architecture uses InputController instead of direct IInput:
+ * 
+ * struct ApplicationDependencies {
+ *     IClock* clock;
+ *     IDisplay* display;
+ *     InputController* inputController;  // Instead of IInput*
+ *     IMidiOutput* midiOutput;
+ *     IDebugOutput* debugOutput;
+ * };
+ * 
+ * InputController construction pattern:
+ * auto inputLayer = InputLayerFactory::createInputLayerForCurrentPlatform(config, inputDeps);
+ * auto gestureDetector = std::make_unique<GestureDetector>(config, clock, debug);
+ * InputController::Dependencies controllerDeps{
+ *     .inputLayer = std::move(inputLayer),
+ *     .gestureDetector = std::move(gestureDetector),
+ *     .clock = clock,
+ *     .debugOutput = debug
+ * };
+ * auto inputController = std::make_unique<InputController>(std::move(controllerDeps), config);
+ */
+
 #include "StepSequencer.h"
 #include "ShiftControls.h"
 #include "CursesDisplay.h"
@@ -267,8 +294,22 @@ private:
                 // uint8_t buttonIndex = event.row * 8 + event.col; // Not needed in new architecture
                 uint32_t currentTime = clock_->getCurrentTime();
                 
-                // TODO: Replace with new InputController architecture
-                // For now, create semantic control messages directly
+                // ARCHITECTURAL NOTE: Proper InputController Integration Pattern
+                // 
+                // The correct architecture would use:
+                // 1. InputController with CursesInputLayer and GestureDetector
+                // 2. InputController::poll() to get ControlMessages  
+                // 3. Pass ControlMessages to sequencer_->processMessage()
+                //
+                // Example proper integration:
+                // inputController_->poll(); 
+                // while (inputController_->hasMessages()) {
+                //     ControlMessage::Message msg;
+                //     inputController_->getNextMessage(msg);
+                //     sequencer_->processMessage(msg);
+                // }
+                //
+                // Temporary direct translation for current compatibility:
                 if (event.pressed) {
                     // Quick tap - toggle step
                     uint8_t track = event.row;

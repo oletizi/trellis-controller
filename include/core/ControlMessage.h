@@ -11,18 +11,31 @@
 namespace ControlMessage {
     
     enum class Type : uint8_t {
-        KEY_PRESS = 0,      // Button press event
-        KEY_RELEASE = 1,    // Button release event  
-        CLOCK_TICK = 2,     // Clock advance by N ticks
-        TIME_ADVANCE = 3,   // Advance time by N milliseconds
-        START = 4,          // Start sequencer
-        STOP = 5,           // Stop sequencer
-        RESET = 6,          // Reset sequencer
-        SAVE_STATE = 7,     // Save current state to file
-        LOAD_STATE = 8,     // Load state from file
-        VERIFY_STATE = 9,   // Check state matches expected
-        SET_TEMPO = 10,     // Set BPM
-        QUERY_STATE = 11    // Output current state info
+        // Legacy low-level events (for backwards compatibility)
+        KEY_PRESS = 0,              // Button press event (legacy)
+        KEY_RELEASE = 1,            // Button release event (legacy)
+        
+        // Semantic sequencer commands
+        TOGGLE_STEP = 2,            // Toggle step on/off (param1=track, param2=step)
+        ENTER_PARAM_LOCK = 3,       // Enter parameter lock mode (param1=track, param2=step)
+        EXIT_PARAM_LOCK = 4,        // Exit parameter lock mode
+        ADJUST_PARAMETER = 5,       // Adjust parameter (param1=paramType, param2=delta as signed)
+        
+        // Timing and control
+        CLOCK_TICK = 10,            // Clock advance by N ticks
+        TIME_ADVANCE = 11,          // Advance time by N milliseconds
+        START = 12,                 // Start sequencer
+        STOP = 13,                  // Stop sequencer
+        RESET = 14,                 // Reset sequencer
+        
+        // State management
+        SAVE_STATE = 20,            // Save current state to file
+        LOAD_STATE = 21,            // Load state from file
+        VERIFY_STATE = 22,          // Check state matches expected
+        QUERY_STATE = 23,           // Output current state info
+        
+        // Configuration
+        SET_TEMPO = 30              // Set BPM
     };
     
     struct Message {
@@ -74,6 +87,23 @@ namespace ControlMessage {
         
         static Message setTempo(uint32_t bpm, uint32_t timestamp = 0) {
             return Message(Type::SET_TEMPO, timestamp, bpm, 0);
+        }
+        
+        // Semantic message factory methods
+        static Message toggleStep(uint8_t track, uint8_t step, uint32_t timestamp = 0) {
+            return Message(Type::TOGGLE_STEP, timestamp, track, step);
+        }
+        
+        static Message enterParamLock(uint8_t track, uint8_t step, uint32_t timestamp = 0) {
+            return Message(Type::ENTER_PARAM_LOCK, timestamp, track, step);
+        }
+        
+        static Message exitParamLock(uint32_t timestamp = 0) {
+            return Message(Type::EXIT_PARAM_LOCK, timestamp, 0, 0);
+        }
+        
+        static Message adjustParameter(uint8_t paramType, int8_t delta, uint32_t timestamp = 0) {
+            return Message(Type::ADJUST_PARAMETER, timestamp, paramType, static_cast<uint32_t>(delta));
         }
         
         // Convert to string for logging/debugging

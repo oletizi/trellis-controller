@@ -17,7 +17,7 @@ StepSequencer::StepSequencer()
     , midiOutput_(nullptr)
     , midiInput_(nullptr)
     , display_(nullptr)
-    , input_(nullptr)
+    , debugOutput_(nullptr)
     , ownsClock_(false)
     , paramEngine_(&lockPool_)
     , lastUpdateTime_(0) {
@@ -39,7 +39,6 @@ StepSequencer::StepSequencer(Dependencies deps)
     , midiOutput_(deps.midiOutput)
     , midiInput_(deps.midiInput)
     , display_(deps.display)
-    , input_(deps.input)
     , debugOutput_(deps.debugOutput)
     , ownsClock_(false)
     , paramEngine_(&lockPool_, deps.clock)
@@ -65,19 +64,9 @@ void StepSequencer::init(uint16_t bpm, uint8_t steps) {
 void StepSequencer::tick() {
     uint32_t currentTime = clock_ ? clock_->getCurrentTime() : 0;
     
-    // Update parameter lock system
+    // Update parameter lock system state
     if (currentTime != lastUpdateTime_) {
-        updateButtonStates(currentTime);
         stateManager_.update(currentTime);
-        
-        // Check for new hold events in normal mode
-        if (!stateManager_.isInParameterLockMode()) {
-            checkForHoldEvents();
-        } else {
-            // BUG FIX #1: Check for hold release in parameter lock mode
-            checkForHoldRelease();
-        }
-        
         lastUpdateTime_ = currentTime;
     }
     
@@ -189,50 +178,8 @@ StepSequencer::TrackTrigger StepSequencer::getTriggeredTracks() {
 
 // Parameter Lock Interface Implementation
 
-void StepSequencer::handleButton(uint8_t button, bool pressed, uint32_t currentTime) {
-    // Maintain full button state for proper hold detection
-    static uint32_t currentButtonState = 0;
-    
-    // Update the button state mask
-    if (pressed) {
-        currentButtonState |= (1UL << button);
-    } else {
-        currentButtonState &= ~(1UL << button);
-    }
-    
-    // Update button tracker with full state
-    buttonTracker_.update(currentButtonState, currentTime);
-    
-    // DEBUG: Add button state tracking
-    #ifdef ARDUINO
-    if (pressed) {
-        Serial.print("DEBUG: Button ");
-        Serial.print(button);
-        Serial.print(" pressed, current mask: 0x");
-        Serial.println(currentButtonState, HEX);
-    }
-    #endif
-    
-    // Record usage for learning
-    if (pressed) {
-        controlGrid_.recordButtonUsage(button);
-    }
-    
-    // Handle based on current mode
-    // BUG FIX #2: Add early return to prevent dual processing
-    if (stateManager_.isInParameterLockMode()) {
-        handleParameterLockInput(button, pressed);
-        // Update display and return early to prevent dual processing
-        updateVisualFeedback();
-        return;
-    }
-    
-    // Handle normal mode only if not in parameter lock mode
-    handleNormalModeButton(button, pressed);
-    
-    // Update display
-    updateVisualFeedback();
-}
+// handleButton method removed - button handling moved to input layer
+// Use processMessage() with semantic ControlMessage objects instead
 
 bool StepSequencer::enterParameterLockMode(uint8_t track, uint8_t step) {
     auto result = stateManager_.enterParameterLockMode(track, step);
@@ -249,13 +196,22 @@ bool StepSequencer::isInParameterLockMode() const {
 }
 
 bool StepSequencer::adjustParameter(ParameterLockPool::ParameterType paramType, int8_t delta) {
-    if (!isInParameterLockMode()) return false;
+    if (!isInParameterLockMode()) {
+        debugLog("PARAM_LOCK: adjustParameter failed - not in parameter lock mode");
+        return false;
+    }
     
     const auto& context = stateManager_.getParameterLockContext();
     uint8_t track = context.heldTrack;
     uint8_t step = context.heldStep;
     
-    if (track >= MAX_TRACKS || step >= MAX_STEPS) return false;
+    debugLog("PARAM_LOCK: adjustParameter called - track=%d, step=%d, paramType=%d, delta=%d", 
+             track, step, (int)paramType, delta);
+    
+    if (track >= MAX_TRACKS || step >= MAX_STEPS) {
+        debugLog("PARAM_LOCK: adjustParameter failed - invalid track/step");
+        return false;
+    }
     
     // Get or create parameter lock
     StepData& stepData = patternData_[track][step];
@@ -275,17 +231,27 @@ bool StepSequencer::adjustParameter(ParameterLockPool::ParameterType paramType, 
     lock.setParameter(paramType, true);
     
     switch (paramType) {
-        case ParameterLockPool::ParameterType::NOTE:
+        case ParameterLockPool::ParameterType::NOTE: {
+            int8_t oldValue = lock.noteOffset;
             lock.noteOffset += delta;
             lock.noteOffset = std::max(-64, std::min(63, static_cast<int>(lock.noteOffset)));
+            debugLog("PARAM_LOCK: NOTE adjustment - old=%d, new=%d (delta=%d)", oldValue, lock.noteOffset, delta);
             break;
-        case ParameterLockPool::ParameterType::VELOCITY:
+        }
+        case ParameterLockPool::ParameterType::VELOCITY: {
+            uint8_t oldValue = lock.velocity;
             lock.velocity = std::max(0, std::min(127, static_cast<int>(lock.velocity) + delta));
+            debugLog("PARAM_LOCK: VELOCITY adjustment - old=%d, new=%d (delta=%d)", oldValue, lock.velocity, delta);
             break;
-        case ParameterLockPool::ParameterType::LENGTH:
+        }
+        case ParameterLockPool::ParameterType::LENGTH: {
+            uint8_t oldValue = lock.length;
             lock.length = std::max(1, std::min(255, static_cast<int>(lock.length) + delta));
+            debugLog("PARAM_LOCK: LENGTH adjustment - old=%d, new=%d (delta=%d)", oldValue, lock.length, delta);
             break;
+        }
         default:
+            debugLog("PARAM_LOCK: Unknown parameter type %d", (int)paramType);
             return false;
     }
     
@@ -320,9 +286,7 @@ void StepSequencer::updateDisplay() {
     updateVisualFeedback();
 }
 
-void StepSequencer::setHandPreference(ControlGrid::HandPreference preference) {
-    controlGrid_.setHandPreference(preference);
-}
+// setHandPreference method removed - hand preference should be handled by input layer
 
 // Private Methods
 
@@ -389,92 +353,11 @@ void StepSequencer::handleMidiInput() {
     }
 }
 
-void StepSequencer::updateButtonStates(uint32_t currentTime) {
-    // The button tracker is updated in handleButton()
-    // This is for any additional state updates needed
-}
+// updateButtonStates method removed - button state handling moved to input layer
 
-void StepSequencer::handleNormalModeButton(uint8_t button, bool pressed) {
-    // Only process button releases (quick taps) for step toggling
-    if (pressed) return;
-    
-    uint8_t track, step;
-    if (!buttonToTrackStep(button, track, step)) return;
-    
-    // BUG FIX: Don't toggle step if button was used for parameter lock
-    // Check if hold was processed (indicates it was used for parameter lock)
-    const auto& buttonState = buttonTracker_.getButtonState(button);
-    if (buttonState.holdProcessed) {
-        // This button was used for parameter lock, don't toggle
-        debugLog("NORMAL_MODE: Button %d was used for parameter lock, skipping toggle", button);
-        return;
-    }
-    
-    // Check if this was a quick tap (not a hold)
-    if (buttonState.holdDuration < 500) {  // Less than hold threshold
-        toggleStep(track, step);
-    }
-}
+// handleNormalModeButton method removed - use TOGGLE_STEP ControlMessage instead
 
-void StepSequencer::handleParameterLockInput(uint8_t button, bool pressed) {
-    // CRITICAL FIX: Handle both button presses and releases properly
-    // Only exit when the held step button is released, not control buttons
-    
-    debugLog("PARAM_LOCK: handleParameterLockInput called for button %d (pressed=%d)", button, pressed);
-    
-    const auto& context = stateManager_.getParameterLockContext();
-    uint8_t heldButton = context.heldTrack * 8 + context.heldStep;
-    
-    // Check if this is the held step button
-    if (button == heldButton) {
-        if (!pressed) {
-            // Held step button released - exit parameter lock mode
-            debugLog("PARAM_LOCK: Held step button %d released, exiting parameter lock mode", button);
-            stateManager_.exitParameterLockMode();
-        }
-        // Don't process held step presses/releases as control inputs
-        return;
-    }
-    
-    // For control buttons, only process presses (not releases)
-    if (!pressed) {
-        debugLog("PARAM_LOCK: Control button %d released, ignoring", button);
-        return;
-    }
-    
-    // Get control grid mapping
-    ControlGrid::ControlMapping mapping = controlGrid_.getMapping(context.heldStep, context.heldTrack);
-    
-    debugLog("PARAM_LOCK: Control grid mapping valid=%d, heldStep=%d, heldTrack=%d", 
-            mapping.isValid, context.heldStep, context.heldTrack);
-    
-    // Check if button is in control area
-    if (!mapping.isInControlArea(button)) {
-        debugLog("PARAM_LOCK: Button %d outside control area, ignoring", button);
-        return;
-    }
-    
-    // Get parameter type and adjustment
-    ParameterLockPool::ParameterType paramType = controlGrid_.getParameterType(button, mapping);
-    int8_t adjustment = controlGrid_.getParameterAdjustment(button, mapping);
-    
-    debugLog("PARAM_LOCK: Button %d -> paramType=%d, adjustment=%d", button, (int)paramType, adjustment);
-    
-    // Apply parameter adjustment
-    if (paramType != ParameterLockPool::ParameterType::NONE && adjustment != 0) {
-        debugLog("PARAM_LOCK: Calling adjustParameter with type %d, delta %d", (int)paramType, adjustment);
-        
-        bool success = adjustParameter(paramType, adjustment);
-        
-        if (success) {
-            debugLog("PARAM_LOCK: Parameter adjustment successful");
-        } else {
-            debugLog("PARAM_LOCK: Parameter adjustment failed");
-        }
-    } else {
-        debugLog("PARAM_LOCK: No parameter adjustment - paramType=%d, adjustment=%d", (int)paramType, adjustment);
-    }
-}
+// handleParameterLockInput method removed - use ENTER_PARAM_LOCK/EXIT_PARAM_LOCK/ADJUST_PARAMETER ControlMessages instead
 
 bool StepSequencer::buttonToTrackStep(uint8_t button, uint8_t& track, uint8_t& step) const {
     if (button >= 32) return false;
@@ -489,20 +372,35 @@ void StepSequencer::updateVisualFeedback() {
     if (!display_) return;
     
     if (isInParameterLockMode()) {
-        // Show parameter lock mode visuals
+        // Show parameter lock mode visuals (simplified - control colors handled by input layer)
         const auto& context = stateManager_.getParameterLockContext();
-        ControlGrid::ControlMapping mapping = controlGrid_.getMapping(context.heldStep, context.heldTrack);
         
-        uint32_t colors[32] = {0};
-        controlGrid_.getControlColors(mapping, colors);
-        
-        // Set held step to bright white
+        // Set held step to bright white to indicate parameter lock mode
         uint8_t heldButton = context.heldTrack * 8 + context.heldStep;
-        colors[heldButton] = 0xFFFFFF;
         
-        // Set control buttons to their parameter colors
-        for (uint8_t i = 0; i < 32; ++i) {
-            display_->setPixel(i, colors[i]);
+        // Show normal pattern but highlight the held step
+        // Track colors for inactive steps (dim)
+        uint32_t trackColors[4] = {0x200000, 0x002000, 0x000020, 0x202000}; // Dim red, green, blue, yellow
+        
+        for (uint8_t track = 0; track < MAX_TRACKS; ++track) {
+            for (uint8_t step = 0; step < MAX_STEPS; ++step) {
+                uint8_t button = track * 8 + step;
+                uint32_t color = trackColors[track]; // Default to dim track color
+                
+                if (button == heldButton) {
+                    color = 0xFFFFFF; // White for held step in parameter lock mode
+                } else if (patternData_[track][step].active) {
+                    if (patternData_[track][step].hasLock) {
+                        color = 0xFF8000; // Orange for steps with locks
+                    } else {
+                        // Bright track colors for active steps
+                        uint32_t brightColors[4] = {0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00}; // Red, green, blue, yellow
+                        color = brightColors[track];
+                    }
+                }
+                
+                display_->setPixel(button, color);
+            }
         }
     } else {
         // Show normal sequencer state
@@ -543,64 +441,8 @@ void StepSequencer::sendMidiWithParameters(uint8_t track, const CalculatedParame
     }
 }
 
-void StepSequencer::checkForHoldEvents() {
-    // Check all buttons for new hold events
-    for (uint8_t button = 0; button < 32; ++button) {
-        const auto& buttonState = buttonTracker_.getButtonState(button);
-        
-        // If button is held but hold hasn't been processed yet
-        if (buttonState.isHeld && !buttonState.holdProcessed) {
-            uint8_t track, step;
-            if (buttonToTrackStep(button, track, step)) {
-                // DEBUG: Add some debug output for both Arduino and simulation
-                debugLog("PARAM_LOCK: Hold detected for button %d (track %d, step %d)", button, track, step);
-                
-                // Enter parameter lock mode
-                auto result = stateManager_.enterParameterLockMode(track, step);
-                if (result == SequencerStateManager::TransitionResult::SUCCESS) {
-                    debugLog("PARAM_LOCK: Successfully entered parameter lock mode");
-                    // Mark hold as processed to avoid multiple entries
-                    buttonTracker_.markHoldProcessed(button);
-                } else {
-                    debugLog("PARAM_LOCK: Failed to enter parameter lock mode (result: %d)", static_cast<int>(result));
-                }
-            }
-        }
-    }
-}
-
-void StepSequencer::checkForHoldRelease() {
-    // BUG FIX #1 & #3: Check if held button in parameter lock mode was released
-    if (!stateManager_.isInParameterLockMode()) {
-        return; // Should not be called when not in parameter lock mode
-    }
-    
-    const auto& context = stateManager_.getParameterLockContext();
-    uint8_t heldButton = context.heldTrack * 8 + context.heldStep;
-    
-    // Validate button index
-    if (heldButton >= 32) {
-        debugLog("PARAM_LOCK: Invalid held button index %d, exiting parameter lock mode", heldButton);
-        stateManager_.exitParameterLockMode();
-        return;
-    }
-    
-    const auto& buttonState = buttonTracker_.getButtonState(heldButton);
-    
-    // BUG FIX #3: Validate that held button is still actually pressed
-    if (!buttonState.pressed) {
-        debugLog("PARAM_LOCK: Held button %d released, exiting parameter lock mode", heldButton);
-        stateManager_.exitParameterLockMode();
-        return;
-    }
-    
-    // Additional validation: check if button was explicitly released this cycle
-    if (buttonState.wasReleased) {
-        debugLog("PARAM_LOCK: Held button %d was released this cycle, exiting parameter lock mode", heldButton);
-        stateManager_.exitParameterLockMode();
-        return;
-    }
-}
+// checkForHoldEvents and checkForHoldRelease methods removed - 
+// Input layer should send ENTER_PARAM_LOCK/EXIT_PARAM_LOCK ControlMessages based on hold detection
 
 // State restore methods for JSON serialization
 void StepSequencer::restorePatternData(const PatternData& pattern) {
@@ -645,20 +487,84 @@ void StepSequencer::restoreLockPool(const ParameterLockPool& pool) {
     }
 }
 
-void StepSequencer::restoreButtonTracker(const AdaptiveButtonTracker& tracker) {
-    // Note: Button tracker restoration is limited by the current interface
-    // The timing-sensitive state (press times, hold durations) may not be
-    // perfectly restorable, but for testing purposes, the basic pressed state
-    // is sufficient. In a full implementation, AdaptiveButtonTracker would need
-    // a dedicated restoration interface.
-    buttonTracker_ = tracker;
-}
+// restoreButtonTracker method removed - button tracking moved to input layer
 
 void StepSequencer::restoreStateManager(const SequencerStateManager& manager) {
     // Note: State manager restoration may not perfectly restore timing-based
     // state like hold start times. For testing, the mode and parameter lock
     // context is the most important state to restore.
     stateManager_ = manager;
+}
+
+bool StepSequencer::processMessage(const ControlMessage::Message& message) {
+    debugLog("CONTROL_MSG: Processing message type %d", static_cast<int>(message.type));
+    
+    switch (message.type) {
+        case ControlMessage::Type::TOGGLE_STEP: {
+            uint8_t track = static_cast<uint8_t>(message.param1);
+            uint8_t step = static_cast<uint8_t>(message.param2);
+            if (track < MAX_TRACKS && step < MAX_STEPS) {
+                toggleStep(track, step);
+                debugLog("CONTROL_MSG: Toggled step track=%d, step=%d", track, step);
+                return true;
+            }
+            break;
+        }
+        
+        case ControlMessage::Type::ENTER_PARAM_LOCK: {
+            uint8_t track = static_cast<uint8_t>(message.param1);
+            uint8_t step = static_cast<uint8_t>(message.param2);
+            if (track < MAX_TRACKS && step < MAX_STEPS) {
+                bool success = enterParameterLockMode(track, step);
+                debugLog("CONTROL_MSG: Enter param lock track=%d, step=%d, success=%d", track, step, success);
+                return success;
+            }
+            break;
+        }
+        
+        case ControlMessage::Type::EXIT_PARAM_LOCK: {
+            bool success = exitParameterLockMode();
+            debugLog("CONTROL_MSG: Exit param lock, success=%d", success);
+            return success;
+        }
+        
+        case ControlMessage::Type::ADJUST_PARAMETER: {
+            auto paramType = static_cast<ParameterLockPool::ParameterType>(message.param1);
+            int8_t delta = static_cast<int8_t>(message.param2);
+            bool success = adjustParameter(paramType, delta);
+            debugLog("CONTROL_MSG: Adjust parameter type=%d, delta=%d, success=%d", static_cast<int>(paramType), delta, success);
+            return success;
+        }
+        
+        case ControlMessage::Type::START:
+            start();
+            debugLog("CONTROL_MSG: Start sequencer");
+            return true;
+            
+        case ControlMessage::Type::STOP:
+            stop();
+            debugLog("CONTROL_MSG: Stop sequencer");
+            return true;
+            
+        case ControlMessage::Type::RESET:
+            reset();
+            debugLog("CONTROL_MSG: Reset sequencer");
+            return true;
+            
+        case ControlMessage::Type::SET_TEMPO: {
+            uint16_t bpm = static_cast<uint16_t>(message.param1);
+            setTempo(bpm);
+            debugLog("CONTROL_MSG: Set tempo to %d BPM", bpm);
+            return true;
+        }
+        
+        default:
+            debugLog("CONTROL_MSG: Unknown message type %d", static_cast<int>(message.type));
+            return false;
+    }
+    
+    debugLog("CONTROL_MSG: Invalid parameters for message type %d", static_cast<int>(message.type));
+    return false;
 }
 
 void StepSequencer::debugLog(const char* format, ...) {

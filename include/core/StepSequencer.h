@@ -6,14 +6,12 @@
 #include "IMidiOutput.h"
 #include "IMidiInput.h"
 #include "IDisplay.h"
-#include "IInput.h"
 #include "IDebugOutput.h"
 #include "ParameterLockPool.h"
 #include "ParameterLockTypes.h"
 #include "ParameterEngine.h"
 #include "SequencerStateManager.h"
-#include "AdaptiveButtonTracker.h"
-#include "ControlGrid.h"
+#include "ControlMessage.h"
 
 class StepSequencer {
 public:
@@ -25,7 +23,6 @@ public:
         IMidiOutput* midiOutput = nullptr;
         IMidiInput* midiInput = nullptr;
         IDisplay* display = nullptr;
-        IInput* input = nullptr;
         IDebugOutput* debugOutput = nullptr;
     };
     
@@ -69,8 +66,7 @@ public:
     
     TrackTrigger getTriggeredTracks();
     
-    // Parameter Lock Interface
-    void handleButton(uint8_t button, bool pressed, uint32_t currentTime);
+    // Parameter Lock Interface (semantic methods only)
     bool enterParameterLockMode(uint8_t track, uint8_t step);
     bool exitParameterLockMode();
     bool isInParameterLockMode() const;
@@ -78,7 +74,10 @@ public:
     void clearStepLocks(uint8_t track, uint8_t step);
     void clearAllLocks();
     void updateDisplay();
-    void setHandPreference(ControlGrid::HandPreference preference);
+    // setHandPreference removed - hand preference should be handled by input layer
+    
+    // Control message processing (primary semantic interface)
+    bool processMessage(const ControlMessage::Message& message);
     
     // For testing
     uint32_t getTickCounter() const { return tickCounter_; }
@@ -90,7 +89,6 @@ public:
     const PatternData& getPatternData() const { return patternData_; }
     const TrackDefaults* getTrackDefaults() const { return trackDefaults_; }
     const ParameterLockPool& getLockPool() const { return lockPool_; }
-    const AdaptiveButtonTracker& getButtonTracker() const { return buttonTracker_; }
     const SequencerStateManager& getStateManager() const { return stateManager_; }
     
     // State mutators for restore
@@ -102,7 +100,6 @@ public:
     void restorePatternData(const PatternData& pattern);
     void restoreTrackDefaults(const TrackDefaults defaults[MAX_TRACKS]);
     void restoreLockPool(const ParameterLockPool& pool);
-    void restoreButtonTracker(const AdaptiveButtonTracker& tracker);
     void restoreStateManager(const SequencerStateManager& manager);
     
 private:
@@ -131,7 +128,6 @@ private:
     IMidiOutput* midiOutput_;
     IMidiInput* midiInput_;
     IDisplay* display_;
-    IInput* input_;
     IDebugOutput* debugOutput_;
     bool ownsClock_;
     
@@ -139,8 +135,6 @@ private:
     ParameterLockPool lockPool_;
     ParameterEngine paramEngine_;
     SequencerStateManager stateManager_;
-    AdaptiveButtonTracker buttonTracker_;
-    ControlGrid controlGrid_;
     
     // State tracking
     uint32_t lastUpdateTime_;
@@ -152,11 +146,6 @@ private:
     
     // Parameter lock methods
     void initializePatternData();
-    void updateButtonStates(uint32_t currentTime);
-    void checkForHoldEvents();
-    void checkForHoldRelease(); // BUG FIX #1: Add method declaration
-    void handleNormalModeButton(uint8_t button, bool pressed);
-    void handleParameterLockInput(uint8_t button, bool pressed);
     bool buttonToTrackStep(uint8_t button, uint8_t& track, uint8_t& step) const;
     void updateVisualFeedback();
     void sendMidiWithParameters(uint8_t track, const CalculatedParameters& params);

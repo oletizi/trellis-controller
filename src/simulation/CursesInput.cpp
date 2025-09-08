@@ -92,7 +92,7 @@ bool CursesInput::pollEvents() {
             bool currentState = buttonStates_[row][col];
             
             if (shouldHold) {
-                // Uppercase key = PRESS and HOLD (for parameter locks)
+                // Uppercase key = PRESS and HOLD (simulate real hardware hold behavior)
                 if (!currentState) {
                     buttonStates_[row][col] = true;
                     ButtonEvent pressEvent;
@@ -101,11 +101,12 @@ bool CursesInput::pollEvents() {
                     pressEvent.pressed = true;
                     pressEvent.timestamp = clock_ ? clock_->getCurrentTime() : 0;
                     eventQueue_.push(pressEvent);
+                    // Button stays held until corresponding lowercase key releases it
                 }
             } else {
-                // Lowercase/numbers = toggle the current state OR release if held
+                // Lowercase/numbers = release held button or do quick tap
                 if (currentState) {
-                    // If currently held, release it
+                    // If currently held (from uppercase key), release it
                     buttonStates_[row][col] = false;
                     ButtonEvent releaseEvent;
                     releaseEvent.row = row;
@@ -114,19 +115,20 @@ bool CursesInput::pollEvents() {
                     releaseEvent.timestamp = clock_ ? clock_->getCurrentTime() : 0;
                     eventQueue_.push(releaseEvent);
                 } else {
-                    // Quick tap: press then release
+                    // Quick tap: press then release (simulates quick tap timing)
+                    uint32_t currentTime = clock_ ? clock_->getCurrentTime() : 0;
                     ButtonEvent pressEvent;
                     pressEvent.row = row;
                     pressEvent.col = col;
                     pressEvent.pressed = true;
-                    pressEvent.timestamp = clock_ ? clock_->getCurrentTime() : 0;
+                    pressEvent.timestamp = currentTime;
                     eventQueue_.push(pressEvent);
                     
                     ButtonEvent releaseEvent;
                     releaseEvent.row = row;
                     releaseEvent.col = col;
                     releaseEvent.pressed = false;
-                    releaseEvent.timestamp = clock_ ? clock_->getCurrentTime() + 50 : 50;
+                    releaseEvent.timestamp = currentTime + 50; // 50ms tap - well below 500ms threshold
                     eventQueue_.push(releaseEvent);
                 }
             }

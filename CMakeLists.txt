@@ -118,7 +118,6 @@ elseif(BUILD_SIMULATION)
     # Simulation sources (includes testing-only files)
     set(SIMULATION_SOURCES
         ${CMAKE_SOURCE_DIR}/src/simulation/CursesDisplay.cpp
-        ${CMAKE_SOURCE_DIR}/src/simulation/CursesInput.cpp
         ${CMAKE_SOURCE_DIR}/src/simulation/CursesInputLayer.cpp
         ${CMAKE_SOURCE_DIR}/src/simulation/ConsoleDebugOutput.cpp
         ${CMAKE_SOURCE_DIR}/src/simulation/main.cpp

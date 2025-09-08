@@ -28,9 +28,7 @@
 #include "StepSequencer.h"
 #include "ShiftControls.h"
 #include "CursesDisplay.h"
-#include "CursesInput.h"
 #include "IClock.h"
-#include "NonRealtimeSequencer.h"
 #include "ControlMessage.h"
 #include "ConsoleDebugOutput.h"
 // New Input Layer Abstraction includes
@@ -63,41 +61,32 @@ public:
 
 class SimulationApp {
 public:
-    SimulationApp(bool useRealtimeMode = true) 
-        : useRealtimeMode_(useRealtimeMode),
-          clock_(std::make_unique<SystemClock>()),
+    SimulationApp() 
+        : clock_(std::make_unique<SystemClock>()),
           display_(std::make_unique<CursesDisplay>()),
-          input_(std::make_unique<CursesInput>(clock_.get())),
           debugOutput_(nullptr),
           inputController_(nullptr),
           running_(false) {
         
-        if (useRealtimeMode_) {
-            // Create debug output for console
-            debugOutput_ = std::make_unique<ConsoleDebugOutput>(static_cast<CursesDisplay*>(display_.get()));
-            
-            // Set up Input Layer Abstraction architecture
-            setupInputController();
-            
-            // Initialize step sequencer with dependencies for realtime mode
-            StepSequencer::Dependencies deps;
-            deps.clock = clock_.get();
-            deps.display = display_.get();
-            deps.debugOutput = debugOutput_.get();
-            // Note: midiOutput and midiInput are nullptr for simulation
-            // Note: input dependency removed - StepSequencer now uses semantic messages
-            sequencer_ = std::make_unique<StepSequencer>(deps);
-            
-            // Initialize shift controls
-            ShiftControls::Dependencies shiftDeps;
-            shiftDeps.clock = clock_.get();
-            shiftControls_ = std::make_unique<ShiftControls>(shiftDeps);
-        } else {
-            // Initialize non-realtime sequencer
-            nonRealtimeSequencer_ = std::make_unique<NonRealtimeSequencer>();
-            // nonRealtimeSequencer_->setLogStream(&std::cout);
-            nonRealtimeSequencer_->setVerbose(false);
-        }
+        // Create debug output for console
+        debugOutput_ = std::make_unique<ConsoleDebugOutput>(static_cast<CursesDisplay*>(display_.get()));
+        
+        // Set up Input Layer Abstraction architecture
+        setupInputController();
+        
+        // Initialize step sequencer with dependencies
+        StepSequencer::Dependencies deps;
+        deps.clock = clock_.get();
+        deps.display = display_.get();
+        deps.debugOutput = debugOutput_.get();
+        // Note: midiOutput and midiInput are nullptr for simulation
+        // Note: input dependency removed - StepSequencer now uses semantic messages
+        sequencer_ = std::make_unique<StepSequencer>(deps);
+        
+        // Initialize shift controls
+        ShiftControls::Dependencies shiftDeps;
+        shiftDeps.clock = clock_.get();
+        shiftControls_ = std::make_unique<ShiftControls>(shiftDeps);
     }
     
     ~SimulationApp() {
@@ -108,30 +97,16 @@ public:
         // CRITICAL: Initialize display first to set up ncurses properly
         display_->init();
         
-        if (useRealtimeMode_) {
-            // Initialize InputController (which handles CursesInputLayer internally)
-            if (!inputController_->initialize()) {
-                throw std::runtime_error("Failed to initialize InputController");
-            }
-            
-            // Initialize sequencer with 120 BPM, 8 steps
-            sequencer_->init(120, 8);
-            
-            // Create a simple demo pattern
-            setupDemoPattern();
-        } else {
-            // For non-realtime mode, still use legacy CursesInput
-            input_->init();
-            
-            // Initialize non-realtime sequencer
-            nonRealtimeSequencer_->init(120, 8);
-            
-            // Create demo pattern using non-realtime commands
-            setupNonRealtimeDemoPattern();
-            
-            // Show instructions for non-realtime mode
-            showNonRealtimeInstructions();
+        // Initialize InputController (which handles CursesInputLayer internally)
+        if (!inputController_->initialize()) {
+            throw std::runtime_error("Failed to initialize InputController");
         }
+        
+        // Initialize sequencer with 120 BPM, 8 steps
+        sequencer_->init(120, 8);
+        
+        // Create a simple demo pattern
+        setupDemoPattern();
         
         running_ = true;
     }
@@ -139,10 +114,8 @@ public:
     void shutdown() {
         running_ = false;
         
-        if (useRealtimeMode_ && inputController_) {
+        if (inputController_) {
             inputController_->shutdown();
-        } else if (input_) {
-            input_->shutdown();
         }
         
         if (display_) display_->shutdown();
@@ -150,26 +123,17 @@ public:
     
     void run() {
         init();
-        
-        if (useRealtimeMode_) {
-            runRealtime();
-        } else {
-            runNonRealtime();
-        }
-        
+        runRealtime();
         shutdown();
     }
 
 private:
-    bool useRealtimeMode_;
     std::unique_ptr<SystemClock> clock_;
     std::unique_ptr<CursesDisplay> display_;
-    std::unique_ptr<CursesInput> input_;  // Keep legacy for non-realtime mode
     std::unique_ptr<ConsoleDebugOutput> debugOutput_;
-    std::unique_ptr<InputController> inputController_;  // New Input Controller
+    std::unique_ptr<InputController> inputController_;
     std::unique_ptr<StepSequencer> sequencer_;
     std::unique_ptr<ShiftControls> shiftControls_;
-    std::unique_ptr<NonRealtimeSequencer> nonRealtimeSequencer_;
     bool running_;
     uint32_t lastStepTime_;
     
@@ -231,50 +195,6 @@ private:
         }
     }
     
-    void runNonRealtime() {
-        // Non-realtime mode: process input commands and execute them discretely
-        while (running_) {
-            // Process input events
-            if (!input_->pollEvents()) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(16));
-                continue;
-            }
-            
-            ButtonEvent event;
-            while (input_->getNextEvent(event)) {
-                // Check for quit event
-                if (event.row == 255 && event.col == 255) {
-                    running_ = false;
-                    return;
-                }
-                
-                // Convert button events to control messages and process them
-                if (event.row < 4 && event.col < 8) {
-                    uint8_t buttonIndex = event.row * 8 + event.col;
-                    
-                    ControlMessage::Message message;
-                    message.type = event.pressed ? ControlMessage::Type::KEY_PRESS : ControlMessage::Type::KEY_RELEASE;
-                    message.timestamp = event.timestamp;
-                    message.param1 = buttonIndex;
-                    
-                    auto result = nonRealtimeSequencer_->processMessage(message);
-                    
-                    // Commented out debug output to avoid corrupting ncurses display
-                    // if (!result.success) {
-                    //     std::cout << "Error: " << result.errorMessage << std::endl;
-                    // } else if (!result.output.empty()) {
-                    //     std::cout << "Action: " << result.output << std::endl;
-                    // }
-                }
-                
-                // Handle special commands
-                handleNonRealtimeCommands(event);
-            }
-            
-            // Update display using the sequencer's current state
-            updateNonRealtimeDisplay();
-        }
-    }
     
     void setupDemoPattern() {
         // Create a simple demo pattern for testing
@@ -303,32 +223,6 @@ private:
         lastStepTime_ = 0;
     }
     
-    void setupNonRealtimeDemoPattern() {
-        // Create demo pattern using non-realtime messages
-        std::vector<ControlMessage::Message> setupMessages = {
-            {ControlMessage::Type::KEY_PRESS, 100, 0, 0, ""}, // Track 0, step 0
-            {ControlMessage::Type::KEY_RELEASE, 200, 0, 0, ""},
-            {ControlMessage::Type::KEY_PRESS, 300, 2, 0, ""}, // Track 0, step 2
-            {ControlMessage::Type::KEY_RELEASE, 400, 2, 0, ""},
-            {ControlMessage::Type::KEY_PRESS, 500, 4, 0, ""}, // Track 0, step 4
-            {ControlMessage::Type::KEY_RELEASE, 600, 4, 0, ""},
-            {ControlMessage::Type::KEY_PRESS, 700, 6, 0, ""}, // Track 0, step 6
-            {ControlMessage::Type::KEY_RELEASE, 800, 6, 0, ""},
-            
-            {ControlMessage::Type::KEY_PRESS, 900, 9, 0, ""}, // Track 1, step 1
-            {ControlMessage::Type::KEY_RELEASE, 1000, 9, 0, ""},
-            {ControlMessage::Type::KEY_PRESS, 1100, 11, 0, ""}, // Track 1, step 3
-            {ControlMessage::Type::KEY_RELEASE, 1200, 11, 0, ""},
-            
-            {ControlMessage::Type::START, 1500, 0, 0, ""} // Start sequencer
-        };
-        
-        auto result = nonRealtimeSequencer_->processBatch(setupMessages);
-        // Commented out debug output to avoid corrupting ncurses display
-        // if (!result.allSucceeded) {
-        //     std::cout << "Warning: Some demo pattern setup failed" << std::endl;
-        // }
-    }
     
     void handleInput() {
         // NEW ARCHITECTURE: Use InputController for complete input processing
@@ -399,62 +293,6 @@ private:
         }
     }
     
-    void handleNonRealtimeCommands(const ButtonEvent& event) {
-        // Handle special non-realtime commands
-        if (event.pressed && event.row == 3) {
-            switch (event.col) {
-                case 0: // 'z' - Start/Stop toggle
-                    {
-                        auto state = nonRealtimeSequencer_->getCurrentState();
-                        ControlMessage::Message msg;
-                        msg.type = state.playing ? ControlMessage::Type::STOP : ControlMessage::Type::START;
-                        msg.timestamp = event.timestamp;
-                        
-                        auto result = nonRealtimeSequencer_->processMessage(msg);
-                        // Commented out debug output to avoid corrupting ncurses display
-                        // if (!result.success) {
-                        //     std::cout << "Error: " << result.errorMessage << std::endl;
-                        // } else {
-                        //     std::cout << result.output << std::endl;
-                        // }
-                    }
-                    break;
-                    
-                case 1: // 'x' - Step forward
-                    {
-                        ControlMessage::Message msg;
-                        msg.type = ControlMessage::Type::CLOCK_TICK;
-                        msg.timestamp = event.timestamp;
-                        msg.param1 = 1;
-                        
-                        auto result = nonRealtimeSequencer_->processMessage(msg);
-                        // Commented out debug output to avoid corrupting ncurses display
-                        // if (!result.success) {
-                        //     std::cout << "Error: " << result.errorMessage << std::endl;
-                        // } else {
-                        //     std::cout << "Manual tick: " << result.output << std::endl;
-                        // }
-                    }
-                    break;
-                    
-                case 2: // 'c' - Reset
-                    {
-                        ControlMessage::Message msg;
-                        msg.type = ControlMessage::Type::RESET;
-                        msg.timestamp = event.timestamp;
-                        
-                        auto result = nonRealtimeSequencer_->processMessage(msg);
-                        // Commented out debug output to avoid corrupting ncurses display
-                        // if (!result.success) {
-                        //     std::cout << "Error: " << result.errorMessage << std::endl;
-                        // } else {
-                        //     std::cout << "Reset: " << result.output << std::endl;
-                        // }
-                    }
-                    break;
-            }
-        }
-    }
     
     void updateDisplay() {
         // Clear display
@@ -469,60 +307,8 @@ private:
         display_->refresh();
     }
     
-    void updateNonRealtimeDisplay() {
-        // Clear display
-        display_->clear();
-        
-        // Get current state from non-realtime sequencer
-        auto state = nonRealtimeSequencer_->getCurrentState();
-        
-        // Manually draw the sequencer state
-        drawSequencerState(state);
-        
-        display_->refresh();
-    }
     
-    void drawSequencerState(const SequencerState::Snapshot& state) {
-        // Track colors
-        const uint8_t trackColors[4][3] = {
-            {255, 0, 0},   // Red
-            {0, 255, 0},   // Green
-            {0, 0, 255},   // Blue
-            {255, 255, 0}  // Yellow
-        };
-        
-        // Draw pattern steps
-        for (int track = 0; track < 4; ++track) {
-            for (int step = 0; step < 8; ++step) {
-                uint8_t row = static_cast<uint8_t>(track);
-                uint8_t col = static_cast<uint8_t>(step);
-                
-                if (state.pattern[track][step].active) {
-                    // Active step - use full brightness
-                    uint8_t brightness = (state.playing && state.currentStep == step) ? 255 : 128;
-                    display_->setLED(row, col, 
-                        (trackColors[track][0] * brightness) / 255,
-                        (trackColors[track][1] * brightness) / 255,
-                        (trackColors[track][2] * brightness) / 255);
-                } else {
-                    // Inactive step - dim or off
-                    uint8_t brightness = (state.playing && state.currentStep == step) ? 64 : 0;
-                    display_->setLED(row, col, brightness, brightness, brightness);
-                }
-            }
-        }
-        
-        // Show parameter lock status
-        if (state.inParameterLockMode && state.heldTrack < 4 && state.heldStep < 8) {
-            // Highlight the held button in white
-            display_->setLED(state.heldTrack, state.heldStep, 255, 255, 255);
-        }
-    }
     
-    void showNonRealtimeInstructions() {
-        // Commented out debug output to avoid corrupting ncurses display
-        // Instructions are shown in the ncurses display instead
-    }
     
     void updateShiftVisualFeedback() {
         if (shiftControls_->isShiftActive()) {
@@ -535,23 +321,9 @@ private:
     }
 };
 
-int main(int argc, char* argv[]) {
+int main() {
     try {
-        bool useRealtimeMode = true;
-        
-        // Check for non-realtime mode flag
-        if (argc > 1 && std::string(argv[1]) == "--non-realtime") {
-            useRealtimeMode = false;
-        }
-        
-        // Commented out debug output to avoid corrupting ncurses display
-        // if (!useRealtimeMode) {
-        //     std::cout << "Starting simulation in NON-REALTIME mode..." << std::endl;
-        // } else {
-        //     std::cout << "Starting simulation in REALTIME mode..." << std::endl;
-        // }
-        
-        SimulationApp app(useRealtimeMode);
+        SimulationApp app;
         app.run();
     } catch (const std::exception& e) {
         // Clean up ncurses in case of error

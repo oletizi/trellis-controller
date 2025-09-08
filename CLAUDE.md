@@ -341,6 +341,47 @@ make lint               # Static analysis
 
 ## Agent Collaboration Guidelines
 
+### Agent Delegation Patterns (Critical for Orchestrator)
+
+**MANDATORY**: When using the `orchestrator` agent, follow these delegation patterns to avoid "phantom changes" where agents claim implementation but only perform analysis:
+
+#### ✅ Implementation-Capable Agents (Can Write/Edit Files):
+- **`cpp-pro`**: Full C++ implementation with Read, Write, MultiEdit, Bash + C++ tools
+- **`embedded-systems`**: Hardware-specific implementation with comprehensive embedded tools
+- **`build-engineer`**: Build system modifications with Read, Write, MultiEdit, Bash + build tools  
+- **`ui-engineer`**: Frontend code implementation with full tool access (*)
+- **`backend-typescript-architect`**: Backend TypeScript implementation with full tool access (*)
+- **`python-backend-engineer`**: Python backend implementation with full tool access (*)
+- **`senior-code-reviewer`**: Comprehensive code review and fixes with full tool access (*)
+- **`general-purpose`**: Fallback for any implementation tasks with full tool access (*)
+
+#### ❌ Analysis-Only Agents (Cannot Implement Changes):
+- **`architect-reviewer`**: Only has Read, analysis tools - **CANNOT** Write/Edit files
+- **`code-reviewer`**: Only has Read, Grep, analysis tools - **CANNOT** implement fixes
+- **`debugger`**: Only has Read, debugging tools - **CANNOT** fix identified issues  
+- **`performance-engineer`**: Only has Read, profiling tools - **CANNOT** optimize code
+- **`test-automator`**: Has Write but **MISSING** Edit/MultiEdit - **CANNOT** modify existing files
+
+#### Proper Delegation Chain:
+1. **Analysis Phase**: Use analysis agents to identify what needs to be done
+   ```
+   orchestrator → architect-reviewer: "What architectural issues exist?"
+   orchestrator → code-reviewer: "What code quality issues need fixing?"
+   orchestrator → performance-engineer: "What optimizations are needed?"
+   ```
+
+2. **Implementation Phase**: Use implementation-capable agents for actual changes
+   ```
+   orchestrator → cpp-pro: "Implement these specific architectural changes: [details]"
+   orchestrator → embedded-systems: "Optimize these performance bottlenecks: [details]"  
+   orchestrator → build-engineer: "Fix these build system issues: [details]"
+   ```
+
+3. **Verification Phase**: Use review agents to validate changes
+   ```
+   orchestrator → senior-code-reviewer: "Review and validate these implementations"
+   ```
+
 ### For Agent Teams Working on This Project:
 
 1. **cpp-pro**: 
@@ -362,26 +403,31 @@ make lint               # Static analysis
    - Create hardware simulation tests
    - Maintain unit test coverage >80%
    - Implement mock objects for dependencies
+   - **NOTE**: Can write new files but cannot edit existing ones
 
 5. **architect-reviewer**: 
    - Validate platform abstraction boundaries
    - Ensure dependency injection patterns
    - Review interface design consistency
+   - **NOTE**: Analysis only - cannot implement changes
 
 6. **debugger**: 
    - Use hardware-aware debugging techniques
    - Leverage serial debugging for embedded
    - Monitor memory and stack usage
+   - **NOTE**: Can identify issues but cannot fix them
 
 7. **performance-engineer**: 
    - Optimize for real-time constraints
    - Profile memory usage patterns
    - Minimize interrupt latency
+   - **NOTE**: Can analyze performance but cannot implement optimizations
 
 8. **code-reviewer**: 
    - Enforce error handling philosophy (no fallbacks)
    - Check platform abstraction violations
    - Verify file size limits (300-500 lines)
+   - **NOTE**: Analysis only - cannot fix identified issues
 
 ## Error Handling Pattern
 

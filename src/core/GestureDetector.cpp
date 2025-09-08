@@ -83,12 +83,22 @@ uint8_t GestureDetector::processButtonPress(uint8_t buttonId, uint32_t timestamp
     
     debugLog("Button " + std::to_string(buttonId) + " pressed");
     
-    // In parameter lock mode, button presses immediately adjust parameters
+    // In parameter lock mode, button presses have special behavior
     if (paramLockState_.active) {
         paramLockState_.lastActivityTime = timestamp;
-        controlMessages.push_back(createParameterAdjustMessage(buttonId, timestamp));
-        debugLog("Parameter adjustment for button " + std::to_string(buttonId));
-        return 1;
+        
+        // Check if this is the lock button - if so, exit parameter lock on next release
+        uint8_t lockButtonId = trackStepToButtonIndex(paramLockState_.lockedTrack, paramLockState_.lockedStep);
+        if (buttonId == lockButtonId) {
+            debugLog("Lock button pressed in parameter lock mode - will exit on release");
+            // Don't generate parameter adjustment for lock button
+            return 0;
+        } else {
+            // Other buttons adjust parameters
+            controlMessages.push_back(createParameterAdjustMessage(buttonId, timestamp));
+            debugLog("Parameter adjustment for button " + std::to_string(buttonId));
+            return 1;
+        }
     }
     
     // In normal mode, press starts hold detection (release will determine tap vs hold)
@@ -100,7 +110,17 @@ uint8_t GestureDetector::processButtonRelease(uint8_t buttonId, uint32_t timesta
     if (buttonId >= 32) return 0;
     
     ButtonState& state = buttonStates_[buttonId];
-    if (!state.pressed) return 0; // Ignore release for unpressed button
+    
+    // Special case: In parameter lock mode, allow release of lock button even if not currently pressed
+    bool isLockButtonRelease = false;
+    if (paramLockState_.active) {
+        uint8_t lockButtonId = trackStepToButtonIndex(paramLockState_.lockedTrack, paramLockState_.lockedStep);
+        isLockButtonRelease = (buttonId == lockButtonId);
+    }
+    
+    if (!state.pressed && !isLockButtonRelease) {
+        return 0; // Ignore release for unpressed button (except lock button in parameter lock mode)
+    }
     
     state.pressed = false;
     state.lastEventTime = timestamp;

@@ -40,10 +40,10 @@ void CursesDisplay::init() {
     ledWindow_ = newwin(ROWS * 2 + 2, COLS * 4 + 2, 5, 2);
     
     // Info window (middle) - instructions
-    infoWindow_ = newwin(7, termWidth - 4, ROWS * 2 + 9, 2);
+    infoWindow_ = newwin(7, termWidth - 4, ROWS * 2 + 7, 2);
     
     // Console window (bottom) - debug output
-    consoleWindow_ = newwin(MAX_CONSOLE_LINES + 2, termWidth - 4, ROWS * 2 + 17, 2);
+    consoleWindow_ = newwin(MAX_CONSOLE_LINES + 2, termWidth - 4, ROWS * 2 + 8, 2);
     
     // Draw borders
     box(ledWindow_, 0, 0);

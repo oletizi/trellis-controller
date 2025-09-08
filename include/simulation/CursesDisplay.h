@@ -11,7 +11,7 @@ class CursesDisplay : public IDisplay {
 public:
     static constexpr uint8_t ROWS = 4;
     static constexpr uint8_t COLS = 8;
-    static constexpr int MAX_CONSOLE_LINES = 8;
+    static constexpr int MAX_CONSOLE_LINES = 20;
     
     CursesDisplay();
     ~CursesDisplay() override;

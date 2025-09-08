@@ -274,6 +274,12 @@ void CursesInputLayer::processKeyInput(int key) {
         }
     } else {
         // Lowercase/numbers = release hold or do quick tap
+        if (debug_) {
+            debug_->log("Processing lowercase key '" + std::string(1, key) + "' for button " + 
+                       std::to_string(buttonId) + ", currentState=" + (currentState ? "TRUE" : "FALSE") + 
+                       ", pressStartTime=" + std::to_string(buttonPressStartTimes_[row][col]));
+        }
+        
         if (currentState) {
             // Release currently held button
             buttonStates_[row][col] = false;
@@ -310,7 +316,7 @@ void CursesInputLayer::processKeyInput(int key) {
             eventQueue_.push(releaseEvent);
             
             if (debug_) {
-                debug_->log("Button " + std::to_string(buttonId) + " quick tap");
+                debug_->log("Button " + std::to_string(buttonId) + " quick tap (generated because currentState was FALSE)");
             }
         }
     }

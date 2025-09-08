@@ -290,18 +290,18 @@ JsonState::Snapshot JsonState::captureState(const StepSequencer& sequencer) {
         }
     }
     
-    // Capture button tracker state
-    const auto& buttonTracker = sequencer.getButtonTracker();
+    // TODO: Button state tracking moved to InputController/GestureDetector
+    // This functionality needs to be updated to work with new architecture
+    // For now, initialize button states to default values
     for (int i = 0; i < 32; ++i) {
-        const auto& buttonState = buttonTracker.getButtonState(i);
-        snapshot.buttons[i].pressed = buttonState.pressed;
-        snapshot.buttons[i].wasPressed = buttonState.wasPressed;
-        snapshot.buttons[i].wasReleased = buttonState.wasReleased;
-        snapshot.buttons[i].pressTime = buttonState.pressTime;
-        snapshot.buttons[i].releaseTime = buttonState.releaseTime;
-        snapshot.buttons[i].isHeld = buttonState.isHeld;
-        snapshot.buttons[i].holdProcessed = buttonState.holdProcessed;
-        snapshot.buttons[i].holdDuration = buttonState.holdDuration;
+        snapshot.buttons[i].pressed = false;
+        snapshot.buttons[i].wasPressed = false;
+        snapshot.buttons[i].wasReleased = false;
+        snapshot.buttons[i].pressTime = 0;
+        snapshot.buttons[i].releaseTime = 0;
+        snapshot.buttons[i].isHeld = false;
+        snapshot.buttons[i].holdProcessed = false;
+        snapshot.buttons[i].holdDuration = 0;
     }
     
     // Capture parameter lock mode state

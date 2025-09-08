@@ -41,19 +41,17 @@ NonRealtimeSequencer::NonRealtimeSequencer()
     : clock_(std::make_unique<VirtualClock>())
     , nullMidi_(std::make_unique<NullMidiOutput>())
     , nullDisplay_(std::make_unique<NullDisplay>())
-    , nullInput_(std::make_unique<NullInput>())
     , logStream_(nullptr)
     , verbose_(false)
     , virtualTime_(0)
     , stateDirectory_("./states")
 {
-    // Initialize sequencer with null dependencies
+    // Initialize sequencer with null dependencies (no input dependency needed)
     StepSequencer::Dependencies deps{
         .clock = clock_.get(),
         .midiOutput = nullMidi_.get(),
         .midiInput = nullptr,
-        .display = nullDisplay_.get(),
-        .input = nullInput_.get()
+        .display = nullDisplay_.get()
     };
     
     sequencer_ = std::make_unique<StepSequencer>(deps);
@@ -98,7 +96,7 @@ NonRealtimeSequencer::ExecutionResult NonRealtimeSequencer::processMessage(const
         switch (message.type) {
             case ControlMessage::Type::KEY_PRESS:
             case ControlMessage::Type::KEY_RELEASE:
-                result = processKeyMessage(message);
+                result = processSemanticMessage(message);
                 break;
                 
             case ControlMessage::Type::CLOCK_TICK:
@@ -418,7 +416,7 @@ void NonRealtimeSequencer::log(const std::string& message) const {
     }
 }
 
-NonRealtimeSequencer::ExecutionResult NonRealtimeSequencer::processKeyMessage(const ControlMessage::Message& message) {
+NonRealtimeSequencer::ExecutionResult NonRealtimeSequencer::processSemanticMessage(const ControlMessage::Message& message) {
     ExecutionResult result;
     
     uint8_t button = static_cast<uint8_t>(message.param1);
@@ -432,7 +430,12 @@ NonRealtimeSequencer::ExecutionResult NonRealtimeSequencer::processKeyMessage(co
     }
     
     try {
-        sequencer_->handleButton(button, pressed, virtualTime_);
+        // Use the new semantic message interface
+        bool success = sequencer_->processMessage(message);
+        if (!success) {
+            result.success = false;
+            result.errorMessage = "Failed to process message: " + message.toString();
+        }
         result.output = (pressed ? "Pressed" : "Released") + std::string(" button ") + std::to_string(button);
     } catch (const std::exception& e) {
         result.success = false;

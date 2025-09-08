@@ -149,11 +149,9 @@ private:
     // Mock interfaces for non-realtime operation
     class NullMidiOutput;
     class NullDisplay;
-    class NullInput;
     
     std::unique_ptr<NullMidiOutput> nullMidi_;
     std::unique_ptr<NullDisplay> nullDisplay_;
-    std::unique_ptr<NullInput> nullInput_;
     
     // Logging
     std::ostream* logStream_;
@@ -169,9 +167,9 @@ private:
     void log(const std::string& message) const;
     
     /**
-     * Process key press/release message
+     * Process semantic control message (replaces legacy key press/release)
      */
-    ExecutionResult processKeyMessage(const ControlMessage::Message& message);
+    ExecutionResult processSemanticMessage(const ControlMessage::Message& message);
     
     /**
      * Process clock tick message
@@ -235,16 +233,7 @@ private:
         uint8_t getCols() const override { return 8; }
     };
     
-    class NullInput : public IInput {
-    public:
-        void init() override {}
-        void shutdown() override {}
-        bool pollEvents() override { return false; }
-        bool getNextEvent(ButtonEvent&) override { return false; }
-        bool isButtonPressed(uint8_t, uint8_t) const override { return false; }
-        uint8_t getRows() const override { return 4; }
-        uint8_t getCols() const override { return 8; }
-    };
+    // NullInput removed - StepSequencer no longer requires IInput dependency
 };
 
 #endif // NON_REALTIME_SEQUENCER_H

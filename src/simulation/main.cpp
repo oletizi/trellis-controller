@@ -47,9 +47,9 @@ public:
             StepSequencer::Dependencies deps;
             deps.clock = clock_.get();
             deps.display = display_.get();
-            deps.input = input_.get();
             deps.debugOutput = debugOutput_.get();
             // Note: midiOutput and midiInput are nullptr for simulation
+            // Note: input dependency removed - StepSequencer now uses semantic messages
             sequencer_ = std::make_unique<StepSequencer>(deps);
             
             // Initialize shift controls
@@ -264,11 +264,18 @@ private:
             
             // Convert row/col to button index for parameter lock system
             if (event.row < 4 && event.col < 8) {
-                uint8_t buttonIndex = event.row * 8 + event.col;
+                // uint8_t buttonIndex = event.row * 8 + event.col; // Not needed in new architecture
                 uint32_t currentTime = clock_->getCurrentTime();
                 
-                // Use StepSequencer's parameter lock button handling
-                sequencer_->handleButton(buttonIndex, event.pressed, currentTime);
+                // TODO: Replace with new InputController architecture
+                // For now, create semantic control messages directly
+                if (event.pressed) {
+                    // Quick tap - toggle step
+                    uint8_t track = event.row;
+                    uint8_t step = event.col;
+                    ControlMessage::Message toggleMsg = ControlMessage::Message::toggleStep(track, step, currentTime);
+                    sequencer_->processMessage(toggleMsg);
+                }
             }
             
             // Handle shift controls first (for legacy compatibility)

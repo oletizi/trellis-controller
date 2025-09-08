@@ -16,7 +16,7 @@ CursesInputLayer::~CursesInputLayer() {
 bool CursesInputLayer::initialize(const InputSystemConfiguration& config, 
                                  const InputLayerDependencies& deps) {
     if (initialized_) {
-        if (debug_) debug_->print("CursesInputLayer already initialized");
+        if (debug_) debug_->log("CursesInputLayer already initialized");
         return true;
     }
     
@@ -57,14 +57,14 @@ bool CursesInputLayer::initialize(const InputSystemConfiguration& config,
         initialized_ = true;
         
         if (debug_) {
-            debug_->print("CursesInputLayer initialized successfully");
+            debug_->log("CursesInputLayer initialized successfully");
         }
         
         return true;
         
     } catch (const std::exception& e) {
         if (debug_) {
-            debug_->print("CursesInputLayer initialization failed: " + std::string(e.what()));
+            debug_->log("CursesInputLayer initialization failed: " + std::string(e.what()));
         }
         throw std::runtime_error("CursesInputLayer initialization failed: " + std::string(e.what()));
     }
@@ -85,7 +85,7 @@ void CursesInputLayer::shutdown() {
     initialized_ = false;
     
     if (debug_) {
-        debug_->print("CursesInputLayer shutdown complete");
+        debug_->log("CursesInputLayer shutdown complete");
     }
 }
 
@@ -95,13 +95,11 @@ bool CursesInputLayer::poll() {
     uint32_t pollStartTime = clock_->getCurrentTime();
     status_.pollCount++;
     
-    bool eventsGenerated = false;
     int key;
     
     // Process all available keys in non-blocking mode
     while ((key = getch()) != ERR) {
         processKeyInput(key);
-        eventsGenerated = true;
     }
     
     // Update polling statistics
@@ -113,7 +111,8 @@ bool CursesInputLayer::poll() {
     
     updateStatistics();
     
-    return eventsGenerated;
+    // Return true to indicate successful polling (regardless of whether events were generated)
+    return true;
 }
 
 bool CursesInputLayer::getNextEvent(InputEvent& event) {
@@ -136,13 +135,13 @@ bool CursesInputLayer::hasEvents() const {
 
 bool CursesInputLayer::setConfiguration(const InputSystemConfiguration& config) {
     if (!validateConfiguration(config)) {
-        if (debug_) debug_->print("CursesInputLayer: Configuration validation failed");
+        if (debug_) debug_->log("CursesInputLayer: Configuration validation failed");
         return false;
     }
     
     config_ = config;
     
-    if (debug_) debug_->print("CursesInputLayer configuration updated");
+    if (debug_) debug_->log("CursesInputLayer configuration updated");
     return true;
 }
 
@@ -184,7 +183,7 @@ uint8_t CursesInputLayer::clearEvents() {
     }
     
     if (debug_ && clearedCount > 0) {
-        debug_->print("Cleared " + std::to_string(clearedCount) + " events from queue");
+        debug_->log("Cleared " + std::to_string(clearedCount) + " events from queue");
     }
     
     return clearedCount;
@@ -259,14 +258,14 @@ void CursesInputLayer::processKeyInput(int key) {
             // Check for queue overflow
             if (eventQueue_.size() >= config_.performance.eventQueueSize) {
                 status_.eventsDropped++;
-                if (debug_) debug_->print("Event queue overflow - dropping press event");
+                if (debug_) debug_->log("Event queue overflow - dropping press event");
                 return;
             }
             
             eventQueue_.push(pressEvent);
             
             if (debug_) {
-                debug_->print("Button " + std::to_string(buttonId) + " hold started");
+                debug_->log("Button " + std::to_string(buttonId) + " hold started");
             }
         }
     } else {
@@ -280,14 +279,14 @@ void CursesInputLayer::processKeyInput(int key) {
             // Check for queue overflow
             if (eventQueue_.size() >= config_.performance.eventQueueSize) {
                 status_.eventsDropped++;
-                if (debug_) debug_->print("Event queue overflow - dropping release event");
+                if (debug_) debug_->log("Event queue overflow - dropping release event");
                 return;
             }
             
             eventQueue_.push(releaseEvent);
             
             if (debug_) {
-                debug_->print("Button " + std::to_string(buttonId) + " hold released");
+                debug_->log("Button " + std::to_string(buttonId) + " hold released");
             }
         } else {
             // Quick tap: press + release with short duration
@@ -297,7 +296,7 @@ void CursesInputLayer::processKeyInput(int key) {
             // Check for queue overflow (need space for both events)
             if (eventQueue_.size() + 1 >= config_.performance.eventQueueSize) {
                 status_.eventsDropped += 2;
-                if (debug_) debug_->print("Event queue overflow - dropping tap events");
+                if (debug_) debug_->log("Event queue overflow - dropping tap events");
                 return;
             }
             
@@ -305,7 +304,7 @@ void CursesInputLayer::processKeyInput(int key) {
             eventQueue_.push(releaseEvent);
             
             if (debug_) {
-                debug_->print("Button " + std::to_string(buttonId) + " quick tap");
+                debug_->log("Button " + std::to_string(buttonId) + " quick tap");
             }
         }
     }
@@ -326,19 +325,19 @@ uint8_t CursesInputLayer::getButtonIndex(uint8_t row, uint8_t col) const {
 bool CursesInputLayer::validateConfiguration(const InputSystemConfiguration& config) const {
     // Verify layout matches our grid
     if (config.layout.gridRows != GRID_ROWS || config.layout.gridCols != GRID_COLS) {
-        if (debug_) debug_->print("Invalid grid dimensions for CursesInputLayer");
+        if (debug_) debug_->log("Invalid grid dimensions for CursesInputLayer");
         return false;
     }
     
     // Verify event queue is reasonable
     if (config.performance.eventQueueSize == 0 || config.performance.eventQueueSize > 1024) {
-        if (debug_) debug_->print("Invalid event queue size");
+        if (debug_) debug_->log("Invalid event queue size");
         return false;
     }
     
     // Basic timing validation
     if (config.timing.pollingIntervalMs == 0 || config.timing.pollingIntervalMs > 1000) {
-        if (debug_) debug_->print("Invalid polling interval");
+        if (debug_) debug_->log("Invalid polling interval");
         return false;
     }
     

@@ -17,7 +17,7 @@ MockInputLayer::~MockInputLayer() {
 bool MockInputLayer::initialize(const InputSystemConfiguration& config, 
                                const InputLayerDependencies& deps) {
     if (initialized_) {
-        if (debug_) debug_->print("MockInputLayer already initialized");
+        if (debug_) debug_->log("MockInputLayer already initialized");
         return true;
     }
     
@@ -45,7 +45,7 @@ bool MockInputLayer::initialize(const InputSystemConfiguration& config,
     initialized_ = true;
     
     if (debug_) {
-        debug_->print("MockInputLayer initialized with " + 
+        debug_->log("MockInputLayer initialized with " + 
                      std::to_string(programmedEvents_.size()) + " programmed events");
     }
     
@@ -64,7 +64,7 @@ void MockInputLayer::shutdown() {
     initialized_ = false;
     
     if (debug_) {
-        debug_->print("MockInputLayer shutdown complete");
+        debug_->log("MockInputLayer shutdown complete");
     }
 }
 
@@ -94,7 +94,8 @@ bool MockInputLayer::poll() {
     
     updateStatistics();
     
-    return eventsGenerated > 0;
+    // Return true to indicate successful polling (regardless of whether events were generated)
+    return true;
 }
 
 bool MockInputLayer::getNextEvent(InputEvent& event) {
@@ -120,13 +121,13 @@ bool MockInputLayer::hasEvents() const {
 
 bool MockInputLayer::setConfiguration(const InputSystemConfiguration& config) {
     if (!validateConfiguration(config)) {
-        if (debug_) debug_->print("MockInputLayer: Configuration validation failed");
+        if (debug_) debug_->log("MockInputLayer: Configuration validation failed");
         return false;
     }
     
     config_ = config;
     
-    if (debug_) debug_->print("MockInputLayer configuration updated");
+    if (debug_) debug_->log("MockInputLayer configuration updated");
     return true;
 }
 
@@ -166,7 +167,7 @@ uint8_t MockInputLayer::clearEvents() {
     }
     
     if (debug_ && clearedCount > 0) {
-        debug_->print("MockInputLayer cleared " + std::to_string(clearedCount) + " events");
+        debug_->log("MockInputLayer cleared " + std::to_string(clearedCount) + " events");
     }
     
     return clearedCount;
@@ -182,13 +183,13 @@ void MockInputLayer::addProgrammedEvent(const InputEvent& event, uint32_t trigge
               });
     
     if (debug_) {
-        debug_->print("Added programmed event for time " + std::to_string(triggerTime));
+        debug_->log("Added programmed event for time " + std::to_string(triggerTime));
     }
 }
 
 void MockInputLayer::addButtonPress(uint8_t buttonId, uint32_t pressTime) {
     if (buttonId >= 32) {
-        if (debug_) debug_->print("Invalid button ID: " + std::to_string(buttonId));
+        if (debug_) debug_->log("Invalid button ID: " + std::to_string(buttonId));
         return;
     }
     
@@ -198,7 +199,7 @@ void MockInputLayer::addButtonPress(uint8_t buttonId, uint32_t pressTime) {
 
 void MockInputLayer::addButtonRelease(uint8_t buttonId, uint32_t releaseTime, uint32_t pressDuration) {
     if (buttonId >= 32) {
-        if (debug_) debug_->print("Invalid button ID: " + std::to_string(buttonId));
+        if (debug_) debug_->log("Invalid button ID: " + std::to_string(buttonId));
         return;
     }
     
@@ -220,7 +221,7 @@ void MockInputLayer::clearProgrammedEvents() {
     programmedEvents_.clear();
     
     if (debug_) {
-        debug_->print("Cleared all programmed events");
+        debug_->log("Cleared all programmed events");
     }
 }
 
@@ -229,7 +230,7 @@ void MockInputLayer::setHardwareFailure(bool shouldFail) {
     status_.hardwareError = shouldFail;
     
     if (debug_) {
-        debug_->print("Hardware failure simulation: " + std::string(shouldFail ? "enabled" : "disabled"));
+        debug_->log("Hardware failure simulation: " + std::string(shouldFail ? "enabled" : "disabled"));
     }
 }
 
@@ -256,7 +257,7 @@ void MockInputLayer::setButtonState(uint8_t buttonId, bool pressed) {
         buttonStates_[buttonId] = pressed;
         
         if (debug_) {
-            debug_->print("Button " + std::to_string(buttonId) + " state set to " + 
+            debug_->log("Button " + std::to_string(buttonId) + " state set to " + 
                          (pressed ? "pressed" : "released"));
         }
     }
@@ -267,7 +268,7 @@ void MockInputLayer::setAllButtonStates(const bool* buttonStates) {
         memcpy(buttonStates_, buttonStates, sizeof(buttonStates_));
         
         if (debug_) {
-            debug_->print("All button states updated");
+            debug_->log("All button states updated");
         }
     }
 }
@@ -290,7 +291,7 @@ uint32_t MockInputLayer::processProgrammedEvents() {
             if (eventQueue_.size() >= config_.performance.eventQueueSize) {
                 status_.eventsDropped++;
                 if (debug_) {
-                    debug_->print("Event queue overflow - dropping programmed event");
+                    debug_->log("Event queue overflow - dropping programmed event");
                 }
                 continue;
             }
@@ -301,7 +302,7 @@ uint32_t MockInputLayer::processProgrammedEvents() {
             eventsGenerated++;
             
             if (debug_) {
-                debug_->print("Triggered programmed event at time " + std::to_string(currentTime));
+                debug_->log("Triggered programmed event at time " + std::to_string(currentTime));
             }
         }
     }
@@ -321,13 +322,13 @@ void MockInputLayer::updateButtonStateFromEvent(const InputEvent& event) {
 bool MockInputLayer::validateConfiguration(const InputSystemConfiguration& config) const {
     // Verify button count matches expected grid
     if (config.layout.totalButtons != 32) {
-        if (debug_) debug_->print("Invalid button count for MockInputLayer");
+        if (debug_) debug_->log("Invalid button count for MockInputLayer");
         return false;
     }
     
     // Verify event queue size is reasonable
     if (config.performance.eventQueueSize == 0 || config.performance.eventQueueSize > 1024) {
-        if (debug_) debug_->print("Invalid event queue size");
+        if (debug_) debug_->log("Invalid event queue size");
         return false;
     }
     

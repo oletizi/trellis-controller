@@ -224,8 +224,24 @@ uint16_t InputController::processInputEvents() {
         status_.eventsProcessed++;
         controlMessages.clear();
         
-        // Process event through gesture detection
-        uint8_t eventMessages = dependencies_.gestureDetector->processInputEvent(inputEvent, controlMessages);
+        // Handle system events directly (not processed by gesture detector)
+        if (inputEvent.type == InputEvent::Type::SYSTEM_EVENT) {
+            // Convert system events to control messages
+            if (inputEvent.deviceId == 255 && inputEvent.value == 1) {
+                // Quit event from simulation
+                ControlMessage::Message quitMsg;
+                quitMsg.type = ControlMessage::Type::SYSTEM_EVENT;
+                quitMsg.timestamp = inputEvent.timestamp;
+                quitMsg.param1 = 255;  // Quit signal
+                quitMsg.param2 = 255;  // Quit signal
+                quitMsg.stringParam = "";
+                controlMessages.push_back(quitMsg);
+                debugLog("System quit event processed");
+            }
+        } else {
+            // Process other events through gesture detection
+            dependencies_.gestureDetector->processInputEvent(inputEvent, controlMessages);
+        }
         
         // Queue resulting control messages
         for (const auto& message : controlMessages) {
@@ -247,7 +263,7 @@ uint16_t InputController::updateGestureTiming() {
     std::vector<ControlMessage::Message> controlMessages;
     
     // Update gesture detector timing
-    uint8_t timingMessages = dependencies_.gestureDetector->updateTiming(currentTime, controlMessages);
+    dependencies_.gestureDetector->updateTiming(currentTime, controlMessages);
     
     uint16_t messagesGenerated = 0;
     
@@ -284,6 +300,6 @@ void InputController::updateStatistics() const {
 
 void InputController::debugLog(const std::string& message) const {
     if (dependencies_.debugOutput) {
-        dependencies_.debugOutput->print("InputController: " + message);
+        dependencies_.debugOutput->log("InputController: " + message);
     }
 }

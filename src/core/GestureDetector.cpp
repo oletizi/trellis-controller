@@ -150,7 +150,7 @@ uint8_t GestureDetector::processButtonRelease(uint8_t buttonId, uint32_t timesta
 }
 
 uint8_t GestureDetector::checkForHoldDetection(uint32_t currentTime,
-                                              std::vector<ControlMessage::Message>& controlMessages) {
+                                              std::vector<ControlMessage::Message>& /* controlMessages */) {
     uint8_t messagesGenerated = 0;
     
     for (uint8_t i = 0; i < 32; ++i) {
@@ -247,6 +247,6 @@ int8_t GestureDetector::calculateParameterDelta(uint8_t buttonId) const {
 
 void GestureDetector::debugLog(const std::string& message) const {
     if (debug_) {
-        debug_->print("GestureDetector: " + message);
+        debug_->log("GestureDetector: " + message);
     }
 }

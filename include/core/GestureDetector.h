@@ -66,7 +66,7 @@ public:
      * 
      * @param config New configuration to apply
      */
-    void setConfiguration(const InputSystemConfiguration& config);
+    void setConfiguration(const InputSystemConfiguration& config) override;
     
     /**
      * @brief Get current configuration

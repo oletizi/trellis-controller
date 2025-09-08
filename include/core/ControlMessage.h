@@ -35,7 +35,10 @@ namespace ControlMessage {
         QUERY_STATE = 23,           // Output current state info
         
         // Configuration
-        SET_TEMPO = 30              // Set BPM
+        SET_TEMPO = 30,             // Set BPM
+        
+        // System events
+        SYSTEM_EVENT = 40           // System events (quit, power, etc.)
     };
     
     struct Message {

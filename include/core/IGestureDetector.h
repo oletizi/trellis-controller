@@ -97,6 +97,13 @@ public:
      * @return true if in parameter lock mode
      */
     virtual bool isInParameterLockMode() const = 0;
+    
+    /**
+     * @brief Update gesture detector configuration
+     * 
+     * @param config New configuration to apply
+     */
+    virtual void setConfiguration(const struct InputSystemConfiguration& config) = 0;
 };
 
 #endif // IGESTURE_DETECTOR_H

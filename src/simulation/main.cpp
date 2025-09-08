@@ -33,6 +33,11 @@
 #include "NonRealtimeSequencer.h"
 #include "ControlMessage.h"
 #include "ConsoleDebugOutput.h"
+// New Input Layer Abstraction includes
+#include "InputController.h"
+#include "CursesInputLayer.h"
+#include "GestureDetector.h"
+#include "InputSystemConfiguration.h"
 #include <memory>
 #include <chrono>
 #include <thread>
@@ -64,11 +69,15 @@ public:
           display_(std::make_unique<CursesDisplay>()),
           input_(std::make_unique<CursesInput>(clock_.get())),
           debugOutput_(nullptr),
+          inputController_(nullptr),
           running_(false) {
         
         if (useRealtimeMode_) {
             // Create debug output for console
             debugOutput_ = std::make_unique<ConsoleDebugOutput>(static_cast<CursesDisplay*>(display_.get()));
+            
+            // Set up Input Layer Abstraction architecture
+            setupInputController();
             
             // Initialize step sequencer with dependencies for realtime mode
             StepSequencer::Dependencies deps;
@@ -98,16 +107,22 @@ public:
     void init() {
         // CRITICAL: Initialize display first to set up ncurses properly
         display_->init();
-        // Then initialize input after ncurses is ready
-        input_->init();
         
         if (useRealtimeMode_) {
+            // Initialize InputController (which handles CursesInputLayer internally)
+            if (!inputController_->initialize()) {
+                throw std::runtime_error("Failed to initialize InputController");
+            }
+            
             // Initialize sequencer with 120 BPM, 8 steps
             sequencer_->init(120, 8);
             
             // Create a simple demo pattern
             setupDemoPattern();
         } else {
+            // For non-realtime mode, still use legacy CursesInput
+            input_->init();
+            
             // Initialize non-realtime sequencer
             nonRealtimeSequencer_->init(120, 8);
             
@@ -124,7 +139,12 @@ public:
     void shutdown() {
         running_ = false;
         
-        if (input_) input_->shutdown();
+        if (useRealtimeMode_ && inputController_) {
+            inputController_->shutdown();
+        } else if (input_) {
+            input_->shutdown();
+        }
+        
         if (display_) display_->shutdown();
     }
     
@@ -144,13 +164,45 @@ private:
     bool useRealtimeMode_;
     std::unique_ptr<SystemClock> clock_;
     std::unique_ptr<CursesDisplay> display_;
-    std::unique_ptr<CursesInput> input_;
+    std::unique_ptr<CursesInput> input_;  // Keep legacy for non-realtime mode
     std::unique_ptr<ConsoleDebugOutput> debugOutput_;
+    std::unique_ptr<InputController> inputController_;  // New Input Controller
     std::unique_ptr<StepSequencer> sequencer_;
     std::unique_ptr<ShiftControls> shiftControls_;
     std::unique_ptr<NonRealtimeSequencer> nonRealtimeSequencer_;
     bool running_;
     uint32_t lastStepTime_;
+    
+    /**
+     * @brief Set up the complete Input Layer Abstraction architecture
+     * 
+     * Creates the proper pipeline: CursesInputLayer → GestureDetector → InputController
+     */
+    void setupInputController() {
+        // Create configuration optimized for simulation
+        auto config = InputSystemConfiguration::forSimulation();
+        
+        // Create input layer dependencies
+        InputLayerDependencies inputLayerDeps;
+        inputLayerDeps.clock = clock_.get();
+        inputLayerDeps.debugOutput = debugOutput_.get();
+        
+        // Create CursesInputLayer
+        auto inputLayer = std::make_unique<CursesInputLayer>();
+        
+        // Create GestureDetector
+        auto gestureDetector = std::make_unique<GestureDetector>(config, clock_.get(), debugOutput_.get());
+        
+        // Create InputController dependencies
+        InputController::Dependencies controllerDeps;
+        controllerDeps.inputLayer = std::move(inputLayer);
+        controllerDeps.gestureDetector = std::move(gestureDetector);
+        controllerDeps.clock = clock_.get();
+        controllerDeps.debugOutput = debugOutput_.get();
+        
+        // Create InputController
+        inputController_ = std::make_unique<InputController>(std::move(controllerDeps), config);
+    }
     
     void runRealtime() {
         const auto targetFrameTime = std::chrono::milliseconds(16); // ~60 FPS
@@ -279,49 +331,56 @@ private:
     }
     
     void handleInput() {
-        if (!input_->pollEvents()) return;
+        // NEW ARCHITECTURE: Use InputController for complete input processing
         
-        ButtonEvent event;
-        while (input_->getNextEvent(event)) {
-            // Check for quit event
-            if (event.row == 255 && event.col == 255) {
+        // Poll InputController for new events and messages
+        if (!inputController_->poll()) {
+            // Handle polling error if needed
+            return;
+        }
+        
+        // Process all available control messages from InputController
+        ControlMessage::Message controlMessage;
+        while (inputController_->hasMessages() && inputController_->getNextMessage(controlMessage)) {
+            
+            // Check for system quit message
+            if (controlMessage.type == ControlMessage::Type::SYSTEM_EVENT && 
+                controlMessage.param1 == 255 && controlMessage.param2 == 255) {
                 running_ = false;
                 return;
             }
             
-            // Convert row/col to button index for parameter lock system
-            if (event.row < 4 && event.col < 8) {
-                // uint8_t buttonIndex = event.row * 8 + event.col; // Not needed in new architecture
-                uint32_t currentTime = clock_->getCurrentTime();
-                
-                // ARCHITECTURAL NOTE: Proper InputController Integration Pattern
-                // 
-                // The correct architecture would use:
-                // 1. InputController with CursesInputLayer and GestureDetector
-                // 2. InputController::poll() to get ControlMessages  
-                // 3. Pass ControlMessages to sequencer_->processMessage()
-                //
-                // Example proper integration:
-                // inputController_->poll(); 
-                // while (inputController_->hasMessages()) {
-                //     ControlMessage::Message msg;
-                //     inputController_->getNextMessage(msg);
-                //     sequencer_->processMessage(msg);
-                // }
-                //
-                // Temporary direct translation for current compatibility:
-                if (event.pressed) {
-                    // Quick tap - toggle step
-                    uint8_t track = event.row;
-                    uint8_t step = event.col;
-                    ControlMessage::Message toggleMsg = ControlMessage::Message::toggleStep(track, step, currentTime);
-                    sequencer_->processMessage(toggleMsg);
-                }
-            }
+            // Process control message through sequencer
+            sequencer_->processMessage(controlMessage);
             
-            // Handle shift controls first (for legacy compatibility)
-            if (shiftControls_->shouldHandleAsControl(event.row, event.col)) {
-                shiftControls_->handleShiftInput(event);
+            // Handle shift controls for legacy compatibility
+            // Note: This is a bridge until shift controls are integrated into gesture detection
+            handleLegacyShiftControls(controlMessage);
+        }
+    }
+    
+    /**
+     * @brief Bridge function to handle legacy shift controls during transition
+     * 
+     * Eventually shift controls should be integrated into gesture detection,
+     * but for now we translate ControlMessages back to ButtonEvents for compatibility.
+     */
+    void handleLegacyShiftControls(const ControlMessage::Message& controlMessage) {
+        // Convert certain control messages to legacy ButtonEvent format for shift controls
+        if (controlMessage.type == ControlMessage::Type::TOGGLE_STEP) {
+            uint8_t track = controlMessage.param1;
+            uint8_t step = controlMessage.param2;
+            
+            // Check if this corresponds to shift control positions
+            if (shiftControls_->shouldHandleAsControl(track, step)) {
+                // Create legacy ButtonEvent for shift controls
+                ButtonEvent legacyEvent;
+                legacyEvent.row = track;
+                legacyEvent.col = step;
+                legacyEvent.pressed = true;  // Assume press for toggle
+                legacyEvent.timestamp = controlMessage.timestamp;
+                
+                shiftControls_->handleShiftInput(legacyEvent);
                 
                 // Check for triggered actions
                 auto action = shiftControls_->getTriggeredAction();

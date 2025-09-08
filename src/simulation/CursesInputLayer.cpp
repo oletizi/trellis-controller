@@ -6,6 +6,7 @@
 CursesInputLayer::CursesInputLayer() {
     // Initialize button states to unpressed
     memset(buttonStates_, false, sizeof(buttonStates_));
+    memset(buttonPressStartTimes_, 0, sizeof(buttonPressStartTimes_));
     status_.reset();
 }
 
@@ -53,6 +54,7 @@ bool CursesInputLayer::initialize(const InputSystemConfiguration& config,
         status_.reset();
         clearEvents();
         memset(buttonStates_, false, sizeof(buttonStates_));
+        memset(buttonPressStartTimes_, 0, sizeof(buttonPressStartTimes_));
         
         initialized_ = true;
         
@@ -78,6 +80,7 @@ void CursesInputLayer::shutdown() {
     
     // Reset button states
     memset(buttonStates_, false, sizeof(buttonStates_));
+    memset(buttonPressStartTimes_, 0, sizeof(buttonPressStartTimes_));
     
     // Clear key mappings
     keyMap_.clear();
@@ -253,6 +256,7 @@ void CursesInputLayer::processKeyInput(int key) {
         // Uppercase = start hold (if not already held)
         if (!currentState) {
             buttonStates_[row][col] = true;
+            buttonPressStartTimes_[row][col] = currentTime; // Track press start time
             InputEvent pressEvent = createButtonPressEvent(buttonId, currentTime);
             
             // Check for queue overflow
@@ -265,7 +269,7 @@ void CursesInputLayer::processKeyInput(int key) {
             eventQueue_.push(pressEvent);
             
             if (debug_) {
-                debug_->log("Button " + std::to_string(buttonId) + " hold started");
+                debug_->log("Button " + std::to_string(buttonId) + " hold started at " + std::to_string(currentTime));
             }
         }
     } else {
@@ -273,7 +277,9 @@ void CursesInputLayer::processKeyInput(int key) {
         if (currentState) {
             // Release currently held button
             buttonStates_[row][col] = false;
-            uint32_t pressDuration = currentTime; // Simplified - could track actual press time
+            uint32_t pressStartTime = buttonPressStartTimes_[row][col];
+            uint32_t pressDuration = currentTime - pressStartTime; // FIXED: Calculate actual press duration
+            buttonPressStartTimes_[row][col] = 0; // Reset press start time
             InputEvent releaseEvent = createButtonReleaseEvent(buttonId, currentTime, pressDuration);
             
             // Check for queue overflow
@@ -286,7 +292,7 @@ void CursesInputLayer::processKeyInput(int key) {
             eventQueue_.push(releaseEvent);
             
             if (debug_) {
-                debug_->log("Button " + std::to_string(buttonId) + " hold released");
+                debug_->log("Button " + std::to_string(buttonId) + " hold released after " + std::to_string(pressDuration) + "ms");
             }
         } else {
             // Quick tap: press + release with short duration

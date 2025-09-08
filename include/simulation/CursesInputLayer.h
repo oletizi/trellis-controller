@@ -85,6 +85,7 @@ private:
     // State management
     bool initialized_ = false;
     bool buttonStates_[GRID_ROWS][GRID_COLS];
+    uint32_t buttonPressStartTimes_[GRID_ROWS][GRID_COLS];
     
     // Key mapping and event processing
     std::map<int, KeyMapping> keyMap_;

@@ -68,6 +68,7 @@ public:
           display_(std::make_unique<CursesDisplay>()),
           debugOutput_(nullptr),
           inputController_(nullptr),
+          inputLayerPtr_(nullptr),
           running_(false) {
         
         // Create debug output for console
@@ -104,6 +105,15 @@ public:
             throw std::runtime_error("Failed to initialize InputController");
         }
         
+        // **CRITICAL FIX**: Connect InputStateEncoder after InputController initialization
+        // This ensures the encoder connection survives the input layer initialization process
+        if (inputLayerPtr_ && inputStateEncoder_) {
+            inputLayerPtr_->setInputStateEncoder(inputStateEncoder_.get());
+            if (debugOutput_) {
+                debugOutput_->log("InputStateEncoder connected to CursesInputLayer after initialization");
+            }
+        }
+        
         // Initialize sequencer with 120 BPM, 8 steps
         sequencer_->init(120, 8);
         
@@ -134,6 +144,8 @@ private:
     std::unique_ptr<CursesDisplay> display_;
     std::unique_ptr<ConsoleDebugOutput> debugOutput_;
     std::unique_ptr<InputController> inputController_;
+    std::unique_ptr<InputStateEncoder> inputStateEncoder_;
+    CursesInputLayer* inputLayerPtr_; ///< Non-owning pointer for encoder connection
     std::unique_ptr<StepSequencer> sequencer_;
     std::unique_ptr<ShiftControls> shiftControls_;
     bool running_;
@@ -157,6 +169,16 @@ private:
         // Create CursesInputLayer
         auto inputLayer = std::make_unique<CursesInputLayer>();
         
+        // **CRITICAL FIX**: Create and integrate InputStateEncoder
+        auto inputStateEncoder = std::make_unique<InputStateEncoder>(InputStateEncoder::Dependencies{
+            .clock = clock_.get(),
+            .debugOutput = debugOutput_.get()
+        });
+        
+        // Store input layer pointer before moving it for later encoder connection
+        // Note: Encoder will be connected after InputController initialization to avoid reset
+        inputLayerPtr_ = inputLayer.get();
+        
         // Create state-based message processor
         auto inputStateProcessor = std::make_unique<InputStateProcessor>(InputStateProcessor::Dependencies{
             .clock = clock_.get(),
@@ -170,6 +192,10 @@ private:
         controllerDeps.inputStateProcessor = std::move(inputStateProcessor);
         controllerDeps.clock = clock_.get();
         controllerDeps.debugOutput = debugOutput_.get();
+        
+        // Note: InputStateEncoder is stored separately and connected to input layer
+        // The encoder ownership is managed here but used by the input layer
+        inputStateEncoder_ = std::move(inputStateEncoder);
         
         // Create InputController
         inputController_ = std::make_unique<InputController>(std::move(controllerDeps), config);

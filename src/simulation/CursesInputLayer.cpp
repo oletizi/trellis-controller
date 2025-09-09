@@ -258,42 +258,63 @@ void CursesInputLayer::processKeyInput(int key) {
     uint8_t buttonId = getButtonIndex(row, col);
     bool isUppercase = isUppercaseKey(key);
     
-    // Create raw keyboard event - platform layer just translates, doesn't interpret
-    // The 'value' field carries the raw key code, 'context' carries uppercase flag
-    // This removes state interpretation from the platform layer
-    InputEvent event = createRawKeyboardEvent(buttonId, currentTime, key, isUppercase);
+    // **CRITICAL FIX**: Generate proper BUTTON_PRESS/BUTTON_RELEASE events
+    // In simulation, we interpret keyboard input as momentary button actions:
+    // - Normal keys = momentary press (BUTTON_PRESS immediately followed by BUTTON_RELEASE)
+    // - Uppercase keys = longer press (simulating parameter lock gesture)
     
-    if (debug_) {
-        debug_->log("[CursesInputLayer] RAW KEY " + std::string(1, key) + 
-                   " (" + (isUppercase ? "uppercase" : "lowercase") + 
-                   ") -> RAW EVENT for button " + std::to_string(buttonId));
+    InputEvent pressEvent;
+    InputEvent releaseEvent;
+    
+    if (isUppercase) {
+        // Uppercase key simulates a long press for parameter lock detection
+        pressEvent = createButtonPressEvent(buttonId, currentTime);
+        releaseEvent = createButtonReleaseEvent(buttonId, currentTime + 600, 600); // 600ms hold
+        
+        if (debug_) {
+            debug_->log("[CursesInputLayer] UPPERCASE KEY " + std::string(1, key) + 
+                       " -> LONG PRESS/RELEASE for button " + std::to_string(buttonId));
+        }
+    } else {
+        // Normal key simulates a quick tap
+        pressEvent = createButtonPressEvent(buttonId, currentTime);
+        releaseEvent = createButtonReleaseEvent(buttonId, currentTime + 50, 50); // 50ms tap
+        
+        if (debug_) {
+            debug_->log("[CursesInputLayer] NORMAL KEY " + std::string(1, key) + 
+                       " -> QUICK PRESS/RELEASE for button " + std::to_string(buttonId));
+        }
     }
     
-    // **NEW: Update authoritative state using InputStateEncoder**
+    // **Update authoritative state using InputStateEncoder**
     if (encoder_) {
         // Store previous state for transition detection
         previousState_ = currentState_;
         
-        // Update current state through encoder
-        currentState_ = encoder_->processInputEvent(event, currentState_);
+        // Process PRESS event
+        currentState_ = encoder_->processInputEvent(pressEvent, currentState_);
+        
+        // Process RELEASE event
+        currentState_ = encoder_->processInputEvent(releaseEvent, currentState_);
         
         if (debug_) {
             debug_->log("[CursesInputLayer] State updated - Button " + std::to_string(buttonId) + 
-                       " now " + (currentState_.isButtonPressed(buttonId) ? "PRESSED" : "RELEASED"));
+                       " cycled through PRESS->RELEASE");
         }
     } else if (debug_) {
         debug_->log("[CursesInputLayer] No encoder available - state update skipped");
     }
     
-    // **Maintain backward compatibility**: Still generate events for legacy interface
-    // Check for queue overflow
-    if (eventQueue_.size() >= config_.performance.eventQueueSize) {
-        status_.eventsDropped++;
-        if (debug_) debug_->log("Event queue overflow - dropping event");
+    // **Queue both press and release events for the input pipeline**
+    // Check for queue overflow (need space for 2 events)
+    if (eventQueue_.size() >= config_.performance.eventQueueSize - 1) {
+        status_.eventsDropped += 2;
+        if (debug_) debug_->log("Event queue overflow - dropping key event pair");
         return;
     }
     
-    eventQueue_.push(event);
+    eventQueue_.push(pressEvent);
+    eventQueue_.push(releaseEvent);
 }
 
 InputEvent CursesInputLayer::createButtonPressEvent(uint8_t buttonId, uint32_t timestamp) const {
@@ -305,9 +326,8 @@ InputEvent CursesInputLayer::createButtonReleaseEvent(uint8_t buttonId, uint32_t
 }
 
 InputEvent CursesInputLayer::createRawKeyboardEvent(uint8_t buttonId, uint32_t timestamp, int keyCode, bool uppercase) const {
-    // Use SYSTEM_EVENT type with specific deviceId to indicate raw keyboard input
-    // deviceId = buttonId, value = keyCode, context = uppercase flag
-    // This allows higher layers to interpret the semantic meaning
+    // **DEPRECATED**: This method is no longer used since we generate proper BUTTON_PRESS/BUTTON_RELEASE events
+    // Kept for potential future raw keyboard event needs
     return InputEvent(InputEvent::Type::SYSTEM_EVENT, buttonId, timestamp, keyCode, uppercase ? 1 : 0);
 }
 

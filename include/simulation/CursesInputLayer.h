@@ -26,9 +26,13 @@
  * Row 3: z x c v b n m ,  (bottom row, both upper/lower case)
  * 
  * Input Behavior:
- * - Quick press: Toggle step ON/OFF
- * - Hold ≥500ms: Enter parameter lock mode (use lowercase keys/numbers)
+ * - Uppercase keys: Generate BUTTON_PRESS events
+ * - Lowercase keys/numbers: Generate BUTTON_RELEASE events  
  * - ESC: System quit event
+ * 
+ * Note: This platform layer only handles key-to-event translation.
+ * All gesture recognition, timing, and state management is handled
+ * by higher-level components (InputController, GestureDetector).
  * 
  * For complete input documentation and examples, see docs/SIMULATION.md
  * 
@@ -86,8 +90,6 @@ private:
     
     // State management
     bool initialized_ = false;
-    bool buttonStates_[GRID_ROWS][GRID_COLS];
-    uint32_t buttonPressStartTimes_[GRID_ROWS][GRID_COLS];
     
     // Key mapping and event processing
     std::map<int, KeyMapping> keyMap_;
@@ -129,9 +131,9 @@ private:
     /**
      * @brief Process single keyboard key input
      * 
-     * Handles the key mapping, state tracking, and event generation
-     * for a single key press. Manages hold vs tap behavior and
-     * creates appropriate InputEvents.
+     * Handles only key mapping and simple event generation.
+     * No state tracking or gesture logic - that's handled by
+     * higher-level components.
      * 
      * @param key NCurses key code
      */

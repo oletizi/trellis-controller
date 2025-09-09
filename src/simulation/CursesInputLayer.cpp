@@ -4,9 +4,6 @@
 #include <algorithm>
 
 CursesInputLayer::CursesInputLayer() {
-    // Initialize button states to unpressed
-    memset(buttonStates_, false, sizeof(buttonStates_));
-    memset(buttonPressStartTimes_, 0, sizeof(buttonPressStartTimes_));
     status_.reset();
 }
 
@@ -53,8 +50,6 @@ bool CursesInputLayer::initialize(const InputSystemConfiguration& config,
         // Reset state
         status_.reset();
         clearEvents();
-        memset(buttonStates_, false, sizeof(buttonStates_));
-        memset(buttonPressStartTimes_, 0, sizeof(buttonPressStartTimes_));
         
         initialized_ = true;
         
@@ -77,10 +72,6 @@ void CursesInputLayer::shutdown() {
     
     // Clear event queue
     clearEvents();
-    
-    // Reset button states
-    memset(buttonStates_, false, sizeof(buttonStates_));
-    memset(buttonPressStartTimes_, 0, sizeof(buttonPressStartTimes_));
     
     // Clear key mappings
     keyMap_.clear();
@@ -155,12 +146,13 @@ InputSystemConfiguration CursesInputLayer::getConfiguration() const {
 uint8_t CursesInputLayer::getCurrentButtonStates(bool* buttonStates, uint8_t maxButtons) const {
     if (!buttonStates || maxButtons == 0) return 0;
     
+    // Platform layer does not maintain button state - delegate to higher-level components
+    // For simulation, we cannot provide current button state as we only generate events
     uint8_t totalButtons = std::min(static_cast<uint8_t>(GRID_ROWS * GRID_COLS), maxButtons);
     
+    // Return all buttons as unpressed since we don't track state at platform layer
     for (uint8_t i = 0; i < totalButtons; ++i) {
-        uint8_t row = i / GRID_COLS;
-        uint8_t col = i % GRID_COLS;
-        buttonStates[i] = buttonStates_[row][col];
+        buttonStates[i] = false;
     }
     
     return totalButtons;
@@ -250,79 +242,35 @@ void CursesInputLayer::processKeyInput(int key) {
     uint32_t currentTime = clock_->getCurrentTime();
     uint8_t buttonId = getButtonIndex(row, col);
     bool isUppercase = isUppercaseKey(key);
-    bool currentState = buttonStates_[row][col];
+    
+    // Platform layer only generates simple press/release events
+    // All state management and gesture logic is handled by higher-level components
+    InputEvent event;
     
     if (isUppercase) {
-        // Uppercase = start hold (if not already held)
-        if (!currentState) {
-            buttonStates_[row][col] = true;
-            buttonPressStartTimes_[row][col] = currentTime; // Track press start time
-            InputEvent pressEvent = createButtonPressEvent(buttonId, currentTime);
-            
-            // Check for queue overflow
-            if (eventQueue_.size() >= config_.performance.eventQueueSize) {
-                status_.eventsDropped++;
-                if (debug_) debug_->log("Event queue overflow - dropping press event");
-                return;
-            }
-            
-            eventQueue_.push(pressEvent);
-            
-            if (debug_) {
-                debug_->log("[CursesInputLayer] UPPERCASE KEY " + std::string(1, key) + " -> BUTTON PRESS event");
-                debug_->log("Button " + std::to_string(buttonId) + " hold started at " + std::to_string(currentTime));
-            }
+        // Uppercase = generate press event
+        event = createButtonPressEvent(buttonId, currentTime);
+        
+        if (debug_) {
+            debug_->log("[CursesInputLayer] UPPERCASE KEY " + std::string(1, key) + " -> BUTTON PRESS event");
         }
     } else {
-        // Lowercase/numbers = release hold or do quick tap
-        if (debug_) {
-            debug_->log("Processing lowercase key '" + std::string(1, key) + "' for button " + 
-                       std::to_string(buttonId) + ", currentState=" + (currentState ? "TRUE" : "FALSE") + 
-                       ", pressStartTime=" + std::to_string(buttonPressStartTimes_[row][col]));
-        }
+        // Lowercase/numbers = generate release event
+        event = createButtonReleaseEvent(buttonId, currentTime, 0); // Duration calculated by higher layers
         
-        if (currentState) {
-            // Release currently held button
-            buttonStates_[row][col] = false;
-            uint32_t pressStartTime = buttonPressStartTimes_[row][col];
-            uint32_t pressDuration = currentTime - pressStartTime; // FIXED: Calculate actual press duration
-            buttonPressStartTimes_[row][col] = 0; // Reset press start time
-            InputEvent releaseEvent = createButtonReleaseEvent(buttonId, currentTime, pressDuration);
-            
-            // Check for queue overflow
-            if (eventQueue_.size() >= config_.performance.eventQueueSize) {
-                status_.eventsDropped++;
-                if (debug_) debug_->log("Event queue overflow - dropping release event");
-                return;
-            }
-            
-            eventQueue_.push(releaseEvent);
-            
-            if (debug_) {
-                debug_->log("[CursesInputLayer] lowercase key " + std::string(1, key) + " -> BUTTON RELEASE event");
-                debug_->log("Button " + std::to_string(buttonId) + " hold released after " + std::to_string(pressDuration) + "ms");
-            }
-        } else {
-            // Quick tap: press + release with short duration
-            InputEvent pressEvent = createButtonPressEvent(buttonId, currentTime);
-            InputEvent releaseEvent = createButtonReleaseEvent(buttonId, currentTime + 50, 50); // 50ms tap
-            
-            // Check for queue overflow (need space for both events)
-            if (eventQueue_.size() + 1 >= config_.performance.eventQueueSize) {
-                status_.eventsDropped += 2;
-                if (debug_) debug_->log("Event queue overflow - dropping tap events");
-                return;
-            }
-            
-            eventQueue_.push(pressEvent);
-            eventQueue_.push(releaseEvent);
-            
-            if (debug_) {
-                debug_->log("[CursesInputLayer] lowercase key " + std::string(1, key) + " -> QUICK TAP events");
-                debug_->log("Button " + std::to_string(buttonId) + " quick tap (50ms duration)");
-            }
+        if (debug_) {
+            debug_->log("[CursesInputLayer] lowercase key " + std::string(1, key) + " -> BUTTON RELEASE event");
         }
     }
+    
+    // Check for queue overflow
+    if (eventQueue_.size() >= config_.performance.eventQueueSize) {
+        status_.eventsDropped++;
+        if (debug_) debug_->log("Event queue overflow - dropping event");
+        return;
+    }
+    
+    eventQueue_.push(event);
 }
 
 InputEvent CursesInputLayer::createButtonPressEvent(uint8_t buttonId, uint32_t timestamp) const {

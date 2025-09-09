@@ -57,12 +57,12 @@ void CursesDisplay::init() {
     mvprintw(0, 2, "NeoTrellis M4 Step Sequencer Simulator - 4x8 Grid with Parameter Locks");
     mvprintw(1, 2, "Step Sequencer: RED=Track0, GREEN=Track1, BLUE=Track2, YELLOW=Track3 | Press ESC to quit");
     
-    // Updated instructions with hold capability
-    mvprintw(2, 2, "CONTROLS: lowercase/numbers=toggle, UPPERCASE=hold (for parameter locks)");
-    mvprintw(3, 2, "Track 0 (RED): 1 2 3 4 5 6 7 8 | Track 1 (GREEN): Q W E R T Y U I");
+    // Updated instructions with correct parameter lock behavior
+    mvprintw(2, 2, "CONTROLS: lowercase/numbers=toggle step, hold ≥500ms for parameter lock mode");
+    mvprintw(3, 2, "Track 0 (RED): 1 2 3 4 5 6 7 8 | Track 1 (GREEN): q w e r t y u i");
     
-    // Shift-key control legend and mode info  
-    mvprintw(4, 2, "Track 2 (BLUE): A S D F G H J K | Track 3 (YELLOW): Z X C V B N M ,");
+    // Corrected track layout with lowercase keys
+    mvprintw(4, 2, "Track 2 (BLUE): a s d f g h j k | Track 3 (YELLOW): z x c v b n m ,");
     
     initialized_ = true;
     drawGrid();
@@ -206,11 +206,11 @@ void CursesDisplay::drawInfo() {
     box(infoWindow_, 0, 0);
     
     // Updated keyboard mapping with hold capability
-    mvwprintw(infoWindow_, 1, 2, "CONTROLS: lowercase/numbers=toggle step, UPPERCASE=hold step (parameter locks)");
+    mvwprintw(infoWindow_, 1, 2, "CONTROLS: Press=toggle step, Hold ≥500ms=parameter lock mode (keep holding!)");
     mvwprintw(infoWindow_, 2, 2, "Track 0 (RED):    1 2 3 4 5 6 7 8    |  Track 1 (GREEN):  q w e r t y u i");  
     mvwprintw(infoWindow_, 3, 2, "Track 2 (BLUE):   a s d f g h j k    |  Track 3 (YELLOW): z x c v b n m ,");
-    mvwprintw(infoWindow_, 4, 2, "PARAMETER LOCKS: Hold UPPERCASE key (Q,A,Z,1) to enter param lock mode");
-    mvwprintw(infoWindow_, 5, 2, "Example: Hold 'Q' → control grid appears → press lowercase 'q' to release");
+    mvwprintw(infoWindow_, 4, 2, "PARAMETER LOCKS: Hold any key ≥500ms to enter param lock mode (keep holding!)");
+    mvwprintw(infoWindow_, 5, 2, "Example: Hold 'q' → param lock active → press other keys to adjust → release 'q' to exit");
 }
 
 void CursesDisplay::addConsoleMessage(const std::string& message) {

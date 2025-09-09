@@ -43,5 +43,9 @@ coverage_html/
 *.bak
 *.backup
 *.log
+
+# Test artifacts (should be in test/ subdirectories)
+/test_*
+!/test/
 /build-test/
 /cmake-build-debug/

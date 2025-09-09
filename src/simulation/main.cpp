@@ -35,6 +35,8 @@
 #include "InputController.h"
 #include "CursesInputLayer.h"
 #include "GestureDetector.h"
+#include "InputStateEncoder.h"
+#include "InputStateProcessor.h"
 #include "InputSystemConfiguration.h"
 #include <memory>
 #include <chrono>
@@ -140,7 +142,8 @@ private:
     /**
      * @brief Set up the complete Input Layer Abstraction architecture
      * 
-     * Creates the proper pipeline: CursesInputLayer → GestureDetector → InputController
+     * Creates the proper pipeline: CursesInputLayer → InputStateEncoder → InputStateProcessor → InputController
+     * This uses the new bitwise state management system instead of the legacy GestureDetector.
      */
     void setupInputController() {
         // Create configuration optimized for simulation
@@ -154,13 +157,23 @@ private:
         // Create CursesInputLayer
         auto inputLayer = std::make_unique<CursesInputLayer>();
         
-        // Create GestureDetector
-        auto gestureDetector = std::make_unique<GestureDetector>(config, clock_.get(), debugOutput_.get());
+        // Create new bitwise state management components
+        auto inputStateEncoder = std::make_unique<InputStateEncoder>(InputStateEncoder::Dependencies{
+            .clock = clock_.get(),
+            .debugOutput = debugOutput_.get()
+        });
         
-        // Create InputController dependencies
+        auto inputStateProcessor = std::make_unique<InputStateProcessor>(InputStateProcessor::Dependencies{
+            .clock = clock_.get(),
+            .debugOutput = debugOutput_.get()
+        });
+        
+        // Create InputController dependencies with new bitwise system
         InputController::Dependencies controllerDeps;
         controllerDeps.inputLayer = std::move(inputLayer);
-        controllerDeps.gestureDetector = std::move(gestureDetector);
+        controllerDeps.gestureDetector = nullptr; // Remove legacy system
+        controllerDeps.inputStateEncoder = std::move(inputStateEncoder);
+        controllerDeps.inputStateProcessor = std::move(inputStateProcessor);
         controllerDeps.clock = clock_.get();
         controllerDeps.debugOutput = debugOutput_.get();
         

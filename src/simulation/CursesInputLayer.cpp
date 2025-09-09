@@ -269,6 +269,7 @@ void CursesInputLayer::processKeyInput(int key) {
             eventQueue_.push(pressEvent);
             
             if (debug_) {
+                debug_->log("[CursesInputLayer] UPPERCASE KEY " + std::string(1, key) + " -> BUTTON PRESS event");
                 debug_->log("Button " + std::to_string(buttonId) + " hold started at " + std::to_string(currentTime));
             }
         }
@@ -298,6 +299,7 @@ void CursesInputLayer::processKeyInput(int key) {
             eventQueue_.push(releaseEvent);
             
             if (debug_) {
+                debug_->log("[CursesInputLayer] lowercase key " + std::string(1, key) + " -> BUTTON RELEASE event");
                 debug_->log("Button " + std::to_string(buttonId) + " hold released after " + std::to_string(pressDuration) + "ms");
             }
         } else {
@@ -316,7 +318,8 @@ void CursesInputLayer::processKeyInput(int key) {
             eventQueue_.push(releaseEvent);
             
             if (debug_) {
-                debug_->log("Button " + std::to_string(buttonId) + " quick tap (generated because currentState was FALSE)");
+                debug_->log("[CursesInputLayer] lowercase key " + std::string(1, key) + " -> QUICK TAP events");
+                debug_->log("Button " + std::to_string(buttonId) + " quick tap (50ms duration)");
             }
         }
     }

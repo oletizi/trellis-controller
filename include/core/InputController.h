@@ -7,6 +7,8 @@
 #include "InputSystemConfiguration.h"
 #include "IClock.h"
 #include "IDebugOutput.h"
+#include "InputStateEncoder.h"
+#include "InputStateProcessor.h"
 #include <memory>
 #include <queue>
 #include <vector>
@@ -19,7 +21,7 @@
  * input layer with gesture detection and provides a clean interface to the
  * sequencer business logic. It manages the complete input processing pipeline:
  * 
- * InputLayer → InputEvents → GestureDetector → ControlMessages → Sequencer
+ * InputLayer → InputEvents → InputStateEncoder → InputState → InputStateProcessor → ControlMessages → Sequencer
  * 
  * Key Responsibilities:
  * - Coordinate polling from the input layer
@@ -38,18 +40,26 @@ public:
      * @brief Dependencies required for InputController operation
      */
     struct Dependencies {
-        std::unique_ptr<IInputLayer> inputLayer;        ///< Platform-specific input implementation
-        std::unique_ptr<IGestureDetector> gestureDetector; ///< Gesture recognition engine
-        IClock* clock = nullptr;                        ///< Clock for timing operations
-        IDebugOutput* debugOutput = nullptr;            ///< Optional debug output
+        std::unique_ptr<IInputLayer> inputLayer;           ///< Platform-specific input implementation
+        std::unique_ptr<IGestureDetector> gestureDetector; ///< Legacy gesture recognition (optional for backward compatibility)
+        std::unique_ptr<InputStateEncoder> inputStateEncoder; ///< New: InputEvent to InputState conversion
+        std::unique_ptr<InputStateProcessor> inputStateProcessor; ///< New: InputState to ControlMessage translation
+        IClock* clock = nullptr;                           ///< Clock for timing operations
+        IDebugOutput* debugOutput = nullptr;               ///< Optional debug output
         
         /**
          * @brief Check if all required dependencies are present
          * 
+         * Supports both legacy (GestureDetector) and new (InputStateEncoder+InputStateProcessor) systems.
+         * 
          * @return true if all required dependencies are available
          */
         bool isValid() const {
-            return inputLayer && gestureDetector && clock;
+            if (!inputLayer || !clock) return false;
+            // Either legacy system (gestureDetector) or new system (encoder+processor) is required
+            bool hasLegacySystem = gestureDetector != nullptr;
+            bool hasNewSystem = inputStateEncoder && inputStateProcessor;
+            return hasLegacySystem || hasNewSystem;
         }
     };
     
@@ -216,6 +226,7 @@ private:
     // State management
     bool initialized_ = false;
     mutable Status status_;
+    InputState currentInputState_;  ///< Current bitwise input state
     
     // Message queue for control messages
     std::queue<ControlMessage::Message> messageQueue_;

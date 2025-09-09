@@ -27,6 +27,8 @@ set(CORE_SOURCES
     ${CMAKE_SOURCE_DIR}/src/core/ControlMessage.cpp
     ${CMAKE_SOURCE_DIR}/src/core/JsonState.cpp
     ${CMAKE_SOURCE_DIR}/src/core/JsonUtils.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/InputStateProcessor.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/InputStateEncoder.cpp
 )
 
 if(BUILD_TESTS)
@@ -123,7 +125,7 @@ elseif(BUILD_SIMULATION)
         ${CMAKE_SOURCE_DIR}/src/simulation/main.cpp
         ${CMAKE_SOURCE_DIR}/src/core/NonRealtimeSequencer.cpp
         ${CMAKE_SOURCE_DIR}/src/core/InputController.cpp
-        ${CMAKE_SOURCE_DIR}/src/core/GestureDetector.cpp
+        # Note: Legacy GestureDetector.cpp removed - using new InputStateEncoder+InputStateProcessor system
     )
     
     # Create simulation executable

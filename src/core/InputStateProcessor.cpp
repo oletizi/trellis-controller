@@ -26,7 +26,8 @@ std::vector<ControlMessage::Message> InputStateProcessor::translateState(
         uint8_t track, step;
         getTrackStep(buttonId, track, step);
         messages.push_back(ControlMessage::Message::enterParamLock(track, step, timestamp));
-        debugLog("Parameter lock entry detected for button " + std::to_string(buttonId));
+        debugLog(">>> PARAMETER LOCK ENTRY MESSAGE GENERATED <<<");
+        debugLog("Button: " + std::to_string(buttonId) + " -> Track: " + std::to_string(track) + ", Step: " + std::to_string(step));
         return messages;
     }
     
@@ -44,13 +45,17 @@ std::vector<ControlMessage::Message> InputStateProcessor::translateState(
         int8_t delta = (step < 4) ? -1 : +1;  // Left half = decrease, right half = increase
         
         messages.push_back(ControlMessage::Message::adjustParameter(paramType, delta, timestamp));
-        debugLog("Parameter adjustment: type=" + std::to_string(paramType) + " delta=" + std::to_string(delta));
+        debugLog(">>> PARAMETER ADJUSTMENT <<<");
+        debugLog("Button: " + std::to_string(buttonId) + ", Type: " + std::to_string(paramType) + ", Delta: " + std::to_string(delta));
+        debugLog("Lock button: " + std::to_string(currentState.getLockButtonId()) + ", Param lock active: " + std::string(currentState.isParameterLockActive() ? "YES" : "NO"));
         return messages;
     }
     
     // Priority 4: Normal step toggles
     if (isStepToggle(currentState, previousState)) {
         uint32_t changedButtons = findChangedButtons(currentState, previousState);
+        
+        debugLog("Processing step toggles - Param lock active: " + std::string(currentState.isParameterLockActive() ? "YES" : "NO"));
         
         // Generate toggle for each changed button
         for (uint8_t buttonId = 0; buttonId < 32; ++buttonId) {
@@ -59,7 +64,7 @@ std::vector<ControlMessage::Message> InputStateProcessor::translateState(
                     uint8_t track, step;
                     getTrackStep(buttonId, track, step);
                     messages.push_back(ControlMessage::Message::toggleStep(track, step, timestamp));
-                    debugLog("Step toggle: track=" + std::to_string(track) + " step=" + std::to_string(step));
+                    debugLog("Step toggle: button=" + std::to_string(buttonId) + ", track=" + std::to_string(track) + ", step=" + std::to_string(step));
                 }
             }
         }

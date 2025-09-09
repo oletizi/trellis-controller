@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include "AdaptiveButtonTracker.h"
@@ -338,7 +339,7 @@ TEST_CASE("AdaptiveButtonTracker - Comprehensive workflow", "[adaptive_button_tr
 TEST_CASE("AdaptiveButtonTracker - All buttons functional", "[adaptive_button_tracker][parametric]") {
     AdaptiveButtonTracker tracker;
     
-    auto buttonIndex = GENERATE(range(0, static_cast<int>(AdaptiveButtonTracker::MAX_BUTTONS)));
+    auto buttonIndex = GENERATE(values({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31}));
     
     SECTION("Button " + std::to_string(buttonIndex) + " press/hold/release") {
         uint32_t currentTime = 1000;

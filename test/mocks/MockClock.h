@@ -28,6 +28,11 @@ public:
         currentTime_ += milliseconds;
     }
     
+    // Alias for compatibility with some tests
+    void advance(uint32_t milliseconds) {
+        advanceTime(milliseconds);
+    }
+    
 private:
     uint32_t currentTime_;
 };

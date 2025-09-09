@@ -5,6 +5,9 @@
 
 CursesInputLayer::CursesInputLayer() {
     status_.reset();
+    // Initialize states with default values
+    currentState_ = InputState{};
+    previousState_ = InputState{};
 }
 
 CursesInputLayer::~CursesInputLayer() {
@@ -33,6 +36,10 @@ bool CursesInputLayer::initialize(const InputSystemConfiguration& config,
     debug_ = deps.debugOutput;
     config_ = config;
     
+    // Note: InputStateEncoder must be provided by higher-level components
+    // since CursesInputLayer is a platform layer and doesn't create business logic
+    encoder_ = nullptr;  // Will be set by InputController or similar
+    
     // Verify ncurses is initialized
     if (stdscr == nullptr) {
         throw std::runtime_error("CursesInputLayer: ncurses not initialized. CursesDisplay must be initialized first.");
@@ -50,6 +57,10 @@ bool CursesInputLayer::initialize(const InputSystemConfiguration& config,
         // Reset state
         status_.reset();
         clearEvents();
+        
+        // Initialize input states
+        currentState_ = InputState{};
+        previousState_ = InputState{};
         
         initialized_ = true;
         
@@ -75,6 +86,11 @@ void CursesInputLayer::shutdown() {
     
     // Clear key mappings
     keyMap_.clear();
+    
+    // Reset states
+    currentState_ = InputState{};
+    previousState_ = InputState{};
+    encoder_ = nullptr;
     
     initialized_ = false;
     
@@ -146,13 +162,12 @@ InputSystemConfiguration CursesInputLayer::getConfiguration() const {
 uint8_t CursesInputLayer::getCurrentButtonStates(bool* buttonStates, uint8_t maxButtons) const {
     if (!buttonStates || maxButtons == 0) return 0;
     
-    // Platform layer does not maintain button state - delegate to higher-level components
-    // For simulation, we cannot provide current button state as we only generate events
+    // Now we can provide authoritative button state from currentState_
     uint8_t totalButtons = std::min(static_cast<uint8_t>(GRID_ROWS * GRID_COLS), maxButtons);
     
-    // Return all buttons as unpressed since we don't track state at platform layer
+    // Extract button states from our authoritative InputState
     for (uint8_t i = 0; i < totalButtons; ++i) {
-        buttonStates[i] = false;
+        buttonStates[i] = currentState_.isButtonPressed(i);
     }
     
     return totalButtons;
@@ -243,8 +258,7 @@ void CursesInputLayer::processKeyInput(int key) {
     uint8_t buttonId = getButtonIndex(row, col);
     bool isUppercase = isUppercaseKey(key);
     
-    // Platform layer only generates simple press/release events
-    // All state management and gesture logic is handled by higher-level components
+    // Create InputEvent for processing
     InputEvent event;
     
     if (isUppercase) {
@@ -263,6 +277,23 @@ void CursesInputLayer::processKeyInput(int key) {
         }
     }
     
+    // **NEW: Update authoritative state using InputStateEncoder**
+    if (encoder_) {
+        // Store previous state for transition detection
+        previousState_ = currentState_;
+        
+        // Update current state through encoder
+        currentState_ = encoder_->processInputEvent(event, currentState_);
+        
+        if (debug_) {
+            debug_->log("[CursesInputLayer] State updated - Button " + std::to_string(buttonId) + 
+                       " now " + (currentState_.isButtonPressed(buttonId) ? "PRESSED" : "RELEASED"));
+        }
+    } else if (debug_) {
+        debug_->log("[CursesInputLayer] No encoder available - state update skipped");
+    }
+    
+    // **Maintain backward compatibility**: Still generate events for legacy interface
     // Check for queue overflow
     if (eventQueue_.size() >= config_.performance.eventQueueSize) {
         status_.eventsDropped++;
@@ -305,6 +336,22 @@ bool CursesInputLayer::validateConfiguration(const InputSystemConfiguration& con
     }
     
     return true;
+}
+
+InputState CursesInputLayer::getCurrentInputState() const {
+    return currentState_;
+}
+
+void CursesInputLayer::setInputStateEncoder(InputStateEncoder* encoder) {
+    encoder_ = encoder;
+    
+    if (debug_) {
+        if (encoder) {
+            debug_->log("[CursesInputLayer] InputStateEncoder set - state management enabled");
+        } else {
+            debug_->log("[CursesInputLayer] InputStateEncoder cleared - state management disabled");
+        }
+    }
 }
 
 void CursesInputLayer::updateStatistics() const {

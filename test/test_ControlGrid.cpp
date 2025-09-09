@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include "ControlGrid.h"
@@ -491,8 +492,8 @@ TEST_CASE("ControlGrid - Edge cases and error handling", "[control_grid][edge_ca
 TEST_CASE("ControlGrid - All positions mapping validation", "[control_grid][parametric]") {
     ControlGrid grid;
     
-    auto track = GENERATE(range(0, 4));
-    auto step = GENERATE(range(0, 8));
+    auto track = GENERATE(values({0, 1, 2, 3}));
+    auto step = GENERATE(values({0, 1, 2, 3, 4, 5, 6, 7}));
     
     SECTION("Track " + std::to_string(track) + ", Step " + std::to_string(step)) {
         auto mapping = grid.getMapping(step, track);
@@ -548,11 +549,11 @@ TEST_CASE("ControlGrid - Comprehensive workflow test", "[control_grid][workflow]
             grid.recordButtonUsage(button);
             
             // Button should have a meaningful function
-            REQUIRE(paramType != ParameterLockPool::ParameterType::NONE || 
-                   button == mapping.clearButton || 
-                   button == mapping.copyButton ||
-                   button == mapping.pageUpButton ||
-                   button == mapping.pageDownButton);
+            REQUIRE((paramType != ParameterLockPool::ParameterType::NONE || 
+                    button == mapping.clearButton || 
+                    button == mapping.copyButton ||
+                    button == mapping.pageUpButton ||
+                    button == mapping.pageDownButton));
         }
         
         // Check that usage was recorded

@@ -42,24 +42,23 @@ public:
     struct Dependencies {
         std::unique_ptr<IInputLayer> inputLayer;           ///< Platform-specific input implementation
         std::unique_ptr<IGestureDetector> gestureDetector; ///< Legacy gesture recognition (optional for backward compatibility)
-        std::unique_ptr<InputStateEncoder> inputStateEncoder; ///< New: InputEvent to InputState conversion
-        std::unique_ptr<InputStateProcessor> inputStateProcessor; ///< New: InputState to ControlMessage translation
+        std::unique_ptr<InputStateProcessor> inputStateProcessor; ///< State-based message generation
         IClock* clock = nullptr;                           ///< Clock for timing operations
         IDebugOutput* debugOutput = nullptr;               ///< Optional debug output
         
         /**
          * @brief Check if all required dependencies are present
          * 
-         * Supports both legacy (GestureDetector) and new (InputStateEncoder+InputStateProcessor) systems.
+         * Prioritizes new state-based system (InputStateProcessor) over legacy system.
          * 
          * @return true if all required dependencies are available
          */
         bool isValid() const {
             if (!inputLayer || !clock) return false;
-            // Either legacy system (gestureDetector) or new system (encoder+processor) is required
+            // Either new system (processor) or legacy system (gestureDetector) is required
+            bool hasNewSystem = inputStateProcessor != nullptr;
             bool hasLegacySystem = gestureDetector != nullptr;
-            bool hasNewSystem = inputStateEncoder && inputStateProcessor;
-            return hasLegacySystem || hasNewSystem;
+            return hasNewSystem || hasLegacySystem;
         }
     };
     
@@ -122,13 +121,14 @@ public:
     void shutdown();
     
     /**
-     * @brief Poll input devices and process events
+     * @brief Poll input devices and process state changes
      * 
-     * Performs one complete input processing cycle:
-     * 1. Poll input layer for new events
-     * 2. Process events through gesture detection
-     * 3. Update timing for gesture recognition
+     * Performs one complete input processing cycle using modern state-based approach:
+     * 1. Poll input layer for state updates
+     * 2. Get current authoritative input state
+     * 3. Process state transitions through InputStateProcessor
      * 4. Queue resulting control messages
+     * 5. Falls back to legacy event processing if needed
      * 
      * This method should be called regularly (10-20ms intervals)
      * to maintain responsive input processing.
@@ -232,24 +232,36 @@ private:
     std::queue<ControlMessage::Message> messageQueue_;
     
     /**
-     * @brief Process raw input events through gesture detection
+     * @brief Process state-based input using modern state system
      * 
-     * Takes input events from the input layer and processes them
-     * through gesture detection to generate control messages.
+     * Primary processing path: Gets current state from input layer
+     * and processes state transitions through InputStateProcessor.
      * 
      * @return Number of control messages generated
      */
-    uint16_t processInputEvents();
+    uint16_t processStateBasedInput();
     
     /**
-     * @brief Update timing for gesture recognition
+     * @brief Legacy fallback: Process raw input events through gesture detection
      * 
-     * Updates gesture detector timing state and processes any
-     * time-based events like hold detection or timeouts.
+     * Fallback processing path for backward compatibility.
+     * Takes input events from the input layer and processes them
+     * through legacy gesture detection to generate control messages.
+     * 
+     * @return Number of control messages generated
+     */
+    uint16_t processInputEventsLegacy();
+    
+    /**
+     * @brief Update timing for both modern and legacy systems
+     * 
+     * Updates timing state and processes any time-based events
+     * like hold detection or timeouts. Works with both modern
+     * InputStateProcessor and legacy GestureDetector.
      * 
      * @return Number of control messages generated from timing updates
      */
-    uint16_t updateGestureTiming();
+    uint16_t updateTimingState();
     
     /**
      * @brief Add control message to output queue

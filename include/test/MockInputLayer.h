@@ -71,6 +71,7 @@ public:
     bool setConfiguration(const InputSystemConfiguration& config) override;
     InputSystemConfiguration getConfiguration() const override;
     uint8_t getCurrentButtonStates(bool* buttonStates, uint8_t maxButtons) const override;
+    InputState getCurrentInputState() const override;
     InputLayerStatus getStatus() const override;
     uint8_t flush() override;
     uint8_t clearEvents() override;
@@ -119,6 +120,17 @@ public:
      * @param holdDuration How long to hold (default 600ms)
      */
     void addButtonHold(uint8_t buttonId, uint32_t pressTime, uint32_t holdDuration = 600);
+    
+    /**
+     * @brief Immediately inject an event into the event queue
+     * 
+     * Unlike addProgrammedEvent, this bypasses timing and immediately
+     * makes the event available for getNextEvent(). Useful for
+     * integration tests that need precise event control.
+     * 
+     * @param event The event to inject immediately
+     */
+    void injectEvent(const InputEvent& event);
     
     /**
      * @brief Clear all programmed events

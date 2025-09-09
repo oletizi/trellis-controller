@@ -43,10 +43,13 @@ if(BUILD_TESTS)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -g --coverage")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
     
-    # Include directories
+    # Include directories (exclude root include to avoid custom stdint.h conflicts)
     include_directories(
         ${CMAKE_SOURCE_DIR}/include/core
+        ${CMAKE_SOURCE_DIR}/include/simulation
+        ${CMAKE_SOURCE_DIR}/include/test
         ${CMAKE_SOURCE_DIR}/test
+        ${CMAKE_SOURCE_DIR}/test/mocks
     )
     
     # Test sources (exclude the parameter lock test harness for general tests)
@@ -54,25 +57,47 @@ if(BUILD_TESTS)
         ${CMAKE_SOURCE_DIR}/test/*.cpp
     )
     
-    # Separate parameter lock test from other tests
+    # Separate standalone tests with main() functions from Catch2 tests
     list(REMOVE_ITEM ALL_TEST_SOURCES "${CMAKE_SOURCE_DIR}/test/test_parameter_locks.cpp")
+    list(REMOVE_ITEM ALL_TEST_SOURCES "${CMAKE_SOURCE_DIR}/test/debug_param_lock_exit.cpp")
+    list(REMOVE_ITEM ALL_TEST_SOURCES "${CMAKE_SOURCE_DIR}/test/test_bitwise_state_solution.cpp")
+    list(REMOVE_ITEM ALL_TEST_SOURCES "${CMAKE_SOURCE_DIR}/test/test_input_controller_integration.cpp")
+    list(REMOVE_ITEM ALL_TEST_SOURCES "${CMAKE_SOURCE_DIR}/test/test_input_integration.cpp")
+    list(REMOVE_ITEM ALL_TEST_SOURCES "${CMAKE_SOURCE_DIR}/test/test_input_state_processor.cpp")
     set(TEST_SOURCES ${ALL_TEST_SOURCES})
     
-    # Find Catch2
+    # Find dependencies
     find_package(Catch2 3 REQUIRED)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(NCURSES REQUIRED ncurses)
+    
+    # Simulation sources needed for tests
+    set(TEST_SIMULATION_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/simulation/CursesDisplay.cpp
+        ${CMAKE_SOURCE_DIR}/src/simulation/CursesInputLayer.cpp
+        ${CMAKE_SOURCE_DIR}/src/simulation/InputStateAdapter.cpp
+        ${CMAKE_SOURCE_DIR}/src/core/InputController.cpp
+        ${CMAKE_SOURCE_DIR}/src/core/GestureDetector.cpp
+        ${CMAKE_SOURCE_DIR}/src/test/MockInputLayer.cpp
+    )
     
     # Create main test executable (existing tests)
-    add_executable(run_tests ${TEST_SOURCES} ${CORE_SOURCES})
-    target_link_libraries(run_tests PRIVATE Catch2::Catch2WithMain)
+    add_executable(run_tests ${TEST_SOURCES} ${CORE_SOURCES} ${TEST_SIMULATION_SOURCES})
+    target_link_libraries(run_tests PRIVATE Catch2::Catch2WithMain ${NCURSES_LIBRARIES})
+    target_include_directories(run_tests PRIVATE ${NCURSES_INCLUDE_DIRS})
+    target_compile_options(run_tests PRIVATE ${NCURSES_CFLAGS_OTHER})
     add_test(NAME UnitTests COMMAND run_tests)
     
     # Create dedicated Parameter Lock test executable
     add_executable(test_parameter_locks 
         ${CMAKE_SOURCE_DIR}/test/test_parameter_locks.cpp 
         ${CORE_SOURCES}
+        ${TEST_SIMULATION_SOURCES}
         ${CMAKE_SOURCE_DIR}/src/core/NonRealtimeSequencer.cpp
     )
-    target_link_libraries(test_parameter_locks PRIVATE Catch2::Catch2)
+    target_link_libraries(test_parameter_locks PRIVATE Catch2::Catch2 ${NCURSES_LIBRARIES})
+    target_include_directories(test_parameter_locks PRIVATE ${NCURSES_INCLUDE_DIRS})
+    target_compile_options(test_parameter_locks PRIVATE ${NCURSES_CFLAGS_OTHER})
     add_test(NAME ParameterLockTests COMMAND test_parameter_locks)
     
     # Add standalone target for parameter lock tests (runs without Catch2)

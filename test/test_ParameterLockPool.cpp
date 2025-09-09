@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include "ParameterLockPool.h"
@@ -441,8 +442,8 @@ TEST_CASE("ParameterLockPool - Stress testing", "[parameter_lock_pool][stress]")
 TEST_CASE("ParameterLockPool - All valid positions", "[parameter_lock_pool][parametric]") {
     ParameterLockPool pool;
     
-    auto track = GENERATE(range(0, 4));
-    auto step = GENERATE(range(0, 8));
+    auto track = GENERATE(values({0, 1, 2, 3}));
+    auto step = GENERATE(values({0, 1, 2, 3, 4, 5, 6, 7}));
     
     SECTION("Track " + std::to_string(track) + ", Step " + std::to_string(step)) {
         uint8_t index = pool.allocate(track, step);

@@ -1,7 +1,7 @@
 #ifndef INPUT_STATE_ADAPTER_H
 #define INPUT_STATE_ADAPTER_H
 
-#include "InputStateProcessor.h"
+#include "../core/InputStateProcessor.h"
 #include "CursesInputLayer.h"
 #include "IClock.h"
 

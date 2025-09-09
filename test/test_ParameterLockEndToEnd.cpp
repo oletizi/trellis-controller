@@ -23,6 +23,9 @@ public:
     TestTimeSource(uint32_t startTime = 1000) : currentTime_(startTime) {}
     
     uint32_t getCurrentTime() const override { return currentTime_; }
+    void delay(uint32_t milliseconds) override { currentTime_ += milliseconds; }
+    void reset() override { currentTime_ = 1000; }
+    
     void advance(uint32_t ms) { currentTime_ += ms; }
     void setTime(uint32_t time) { currentTime_ = time; }
 };
@@ -524,7 +527,7 @@ TEST_CASE("Parameter Lock End-to-End - Multiple simultaneous locks", "[end_to_en
         REQUIRE(lockIndices.size() == 4);
         REQUIRE(lockPool.getUsedCount() == 4);
         
-        for (size_t i = 0; i < testSteps.size(); ++i) {
+        for (size_t i = 0; i < sizeof(testSteps)/sizeof(testSteps[0]); ++i) {
             const auto& testStep = testSteps[i];
             uint8_t lockIndex = lockIndices[i];
             

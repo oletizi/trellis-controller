@@ -1,5 +1,6 @@
 #include "InputStateAdapter.h"
-#include "InputEvent.h"
+#include "../core/InputEvent.h"
+#include "../core/ControlMessage.h"
 #include <algorithm>
 
 InputStateAdapter::InputStateAdapter(Dependencies deps) 

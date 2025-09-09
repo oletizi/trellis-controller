@@ -157,22 +157,16 @@ private:
         // Create CursesInputLayer
         auto inputLayer = std::make_unique<CursesInputLayer>();
         
-        // Create new bitwise state management components
-        auto inputStateEncoder = std::make_unique<InputStateEncoder>(InputStateEncoder::Dependencies{
-            .clock = clock_.get(),
-            .debugOutput = debugOutput_.get()
-        });
-        
+        // Create state-based message processor
         auto inputStateProcessor = std::make_unique<InputStateProcessor>(InputStateProcessor::Dependencies{
             .clock = clock_.get(),
             .debugOutput = debugOutput_.get()
         });
         
-        // Create InputController dependencies with new bitwise system
+        // Create InputController dependencies with modern state-based system
         InputController::Dependencies controllerDeps;
         controllerDeps.inputLayer = std::move(inputLayer);
-        controllerDeps.gestureDetector = nullptr; // Remove legacy system
-        controllerDeps.inputStateEncoder = std::move(inputStateEncoder);
+        controllerDeps.gestureDetector = nullptr; // Legacy system not used
         controllerDeps.inputStateProcessor = std::move(inputStateProcessor);
         controllerDeps.clock = clock_.get();
         controllerDeps.debugOutput = debugOutput_.get();

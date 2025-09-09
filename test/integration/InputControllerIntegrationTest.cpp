@@ -1,4 +1,4 @@
-#include "catch2/catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 #include "InputController.h"
 #include "GestureDetector.h"
 #include "InputStateEncoder.h"
@@ -150,12 +150,7 @@ private:
         mockDebug_ = std::make_unique<MockDebugOutput>();
         mockInputLayer_ = std::make_unique<MockInputLayer>();
         
-        // Create new bitwise state management components
-        inputStateEncoder_ = std::make_unique<InputStateEncoder>(InputStateEncoder::Dependencies{
-            .clock = mockClock_,
-            .debugOutput = mockDebug_.get()
-        });
-        
+        // Create state processor for message generation
         inputStateProcessor_ = std::make_unique<InputStateProcessor>(InputStateProcessor::Dependencies{
             .clock = mockClock_,
             .debugOutput = mockDebug_.get()
@@ -166,7 +161,6 @@ private:
         InputController::Dependencies deps;
         deps.inputLayer = std::move(mockInputLayer_);
         deps.gestureDetector = nullptr; // Remove legacy system
-        deps.inputStateEncoder = std::move(inputStateEncoder_);
         deps.inputStateProcessor = std::move(inputStateProcessor_);
         deps.clock = mockClock_;
         deps.debugOutput = mockDebug_.get();
@@ -182,7 +176,7 @@ private:
     InputSystemConfiguration createDefaultConfig() {
         InputSystemConfiguration config;
         config.timing.holdThresholdMs = 500;
-        config.timing.debounceMs = 20;
+        config.timing.buttonDebounceMs = 20;
         config.performance.eventQueueSize = 32;
         config.performance.messageQueueSize = 32;
         return config;
@@ -192,7 +186,6 @@ private:
     MockClock* mockClock_;
     std::unique_ptr<MockDebugOutput> mockDebug_;
     std::unique_ptr<MockInputLayer> mockInputLayer_;
-    std::unique_ptr<InputStateEncoder> inputStateEncoder_;
     std::unique_ptr<InputStateProcessor> inputStateProcessor_;
     std::unique_ptr<InputController> inputController_;
     

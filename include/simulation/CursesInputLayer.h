@@ -6,6 +6,8 @@
 #include "InputSystemConfiguration.h"
 #include "IClock.h"
 #include "IDebugOutput.h"
+#include "InputStateEncoder.h"
+#include "InputStateProcessor.h"
 #include <ncurses.h>
 #include <queue>
 #include <map>
@@ -56,6 +58,27 @@ public:
     CursesInputLayer();
     
     /**
+     * @brief Get current authoritative input state
+     * 
+     * Returns the current InputState representing all input device states.
+     * This is the new primary interface for state-based input processing.
+     * 
+     * @return Current InputState with all button states and modifiers
+     */
+    InputState getCurrentInputState() const override;
+    
+    /**
+     * @brief Set InputStateEncoder for state management
+     * 
+     * Allows higher-level components (like InputController) to provide
+     * the encoder for state management. Following dependency injection
+     * pattern where platform layers don't create business logic.
+     * 
+     * @param encoder Pointer to InputStateEncoder for state transitions
+     */
+    void setInputStateEncoder(InputStateEncoder* encoder);
+    
+    /**
      * @brief Virtual destructor ensures proper cleanup
      */
     ~CursesInputLayer() override;
@@ -87,9 +110,12 @@ private:
     InputSystemConfiguration config_;
     IClock* clock_ = nullptr;
     IDebugOutput* debug_ = nullptr;
+    InputStateEncoder* encoder_ = nullptr;
     
     // State management
     bool initialized_ = false;
+    InputState currentState_;    ///< Current authoritative input state
+    InputState previousState_;   ///< Previous state for transition detection
     
     // Key mapping and event processing
     std::map<int, KeyMapping> keyMap_;
@@ -131,9 +157,9 @@ private:
     /**
      * @brief Process single keyboard key input
      * 
-     * Handles only key mapping and simple event generation.
-     * No state tracking or gesture logic - that's handled by
-     * higher-level components.
+     * Now handles both event generation (for backward compatibility)
+     * and state management (primary interface). Updates currentState_
+     * using InputStateEncoder for authoritative state management.
      * 
      * @param key NCurses key code
      */

@@ -3,6 +3,7 @@
 
 #include "InputEvent.h"
 #include "InputSystemConfiguration.h"
+#include "InputStateProcessor.h"  // For InputState definition
 #include <stdint.h>
 
 /**
@@ -226,6 +227,42 @@ public:
      * be returned.
      */
     virtual uint8_t getCurrentButtonStates(bool* buttonStates, uint8_t maxButtons) const = 0;
+    
+    /**
+     * @brief Get current authoritative input state (Modern Interface)
+     * 
+     * Returns the current InputState representing all input device states
+     * in a compact bitwise format. This is the primary interface for
+     * state-based input processing and replaces event-driven patterns
+     * for most use cases.
+     * 
+     * The returned state includes:
+     * - Button press states (bitwise encoded)
+     * - Parameter lock status
+     * - Timing information
+     * - State change counters
+     * 
+     * This method provides the authoritative source of input state that
+     * should be used for state-based processing. It's designed to be
+     * fast and real-time safe with no dynamic allocation.
+     * 
+     * @return Current InputState with all device states encoded
+     * 
+     * Platform Implementation Notes:
+     * - Should return consistent state that matches getCurrentButtonStates()
+     * - Must be real-time safe with bounded execution time
+     * - Should handle platform-specific state encoding
+     * - May use InputStateEncoder for state management if available
+     * 
+     * Usage Example:
+     * ```cpp
+     * InputState currentState = inputLayer->getCurrentInputState();
+     * if (currentState.isButtonPressed(5)) {
+     *     // Handle button 5 press
+     * }
+     * ```
+     */
+    virtual InputState getCurrentInputState() const = 0;
     
     /**
      * @brief Get input layer status and statistics

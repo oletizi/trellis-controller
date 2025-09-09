@@ -147,6 +147,26 @@ uint8_t MockInputLayer::getCurrentButtonStates(bool* buttonStates, uint8_t maxBu
     return copyCount;
 }
 
+InputState MockInputLayer::getCurrentInputState() const {
+    if (!initialized_) {
+        return InputState{}; // Return empty state if not initialized
+    }
+    
+    // Convert button states to bitwise representation
+    uint32_t buttonBits = 0;
+    for (uint8_t i = 0; i < 32; ++i) {
+        if (buttonStates_[i]) {
+            buttonBits |= (1u << i);
+        }
+    }
+    
+    // Create InputState with current time and button states
+    uint32_t currentTime = clock_ ? clock_->getCurrentTime() : 0;
+    
+    // Mock doesn't track parameter lock mode - always false for testing
+    return InputState(buttonBits, false, currentTime, currentTime);
+}
+
 IInputLayer::InputLayerStatus MockInputLayer::getStatus() const {
     updateStatistics();
     return status_;
@@ -171,6 +191,17 @@ uint8_t MockInputLayer::clearEvents() {
     }
     
     return clearedCount;
+}
+
+void MockInputLayer::injectEvent(const InputEvent& event) {
+    // Add event directly to the available events queue
+    eventQueue_.push(event);
+    generatedEvents_.push_back(event);
+    
+    if (debug_) {
+        debug_->log("Injected immediate event: type " + std::to_string(static_cast<int>(event.type)) +
+                   ", deviceId " + std::to_string(event.deviceId));
+    }
 }
 
 void MockInputLayer::addProgrammedEvent(const InputEvent& event, uint32_t triggerTime) {

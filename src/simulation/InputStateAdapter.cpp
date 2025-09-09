@@ -82,7 +82,26 @@ void InputStateAdapter::processInputEvent(const InputEvent& event, InputState& s
         }
         
         case InputEvent::Type::SYSTEM_EVENT:
-            // Handle system events (quit, etc.)
+            // Handle raw keyboard events from CursesInputLayer
+            // These use SYSTEM_EVENT with buttonId as deviceId, keyCode as value, uppercase flag as context
+            if (event.deviceId < 32 && event.value != 1) {  // Not a quit event (value=1 is quit)
+                // This is a raw keyboard event from CursesInputLayer
+                bool isUppercase = (event.context == 1);
+                
+                if (isUppercase) {
+                    // Uppercase = button press semantic
+                    debugLog("Raw keyboard uppercase -> Button " + std::to_string(buttonId) + " PRESS");
+                    state.setButtonState(buttonId, true);
+                } else {
+                    // Lowercase = button release semantic
+                    debugLog("Raw keyboard lowercase -> Button " + std::to_string(buttonId) + " RELEASE");
+                    state.setButtonState(buttonId, false);
+                    
+                    // For releases, we don't have duration info from raw events
+                    // Duration tracking would need to be handled by tracking press timestamps
+                }
+            }
+            // Pass through other system events unchanged
             break;
             
         default:

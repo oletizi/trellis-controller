@@ -258,23 +258,15 @@ void CursesInputLayer::processKeyInput(int key) {
     uint8_t buttonId = getButtonIndex(row, col);
     bool isUppercase = isUppercaseKey(key);
     
-    // Create InputEvent for processing
-    InputEvent event;
+    // Create raw keyboard event - platform layer just translates, doesn't interpret
+    // The 'value' field carries the raw key code, 'context' carries uppercase flag
+    // This removes state interpretation from the platform layer
+    InputEvent event = createRawKeyboardEvent(buttonId, currentTime, key, isUppercase);
     
-    if (isUppercase) {
-        // Uppercase = generate press event
-        event = createButtonPressEvent(buttonId, currentTime);
-        
-        if (debug_) {
-            debug_->log("[CursesInputLayer] UPPERCASE KEY " + std::string(1, key) + " -> BUTTON PRESS event");
-        }
-    } else {
-        // Lowercase/numbers = generate release event
-        event = createButtonReleaseEvent(buttonId, currentTime, 0); // Duration calculated by higher layers
-        
-        if (debug_) {
-            debug_->log("[CursesInputLayer] lowercase key " + std::string(1, key) + " -> BUTTON RELEASE event");
-        }
+    if (debug_) {
+        debug_->log("[CursesInputLayer] RAW KEY " + std::string(1, key) + 
+                   " (" + (isUppercase ? "uppercase" : "lowercase") + 
+                   ") -> RAW EVENT for button " + std::to_string(buttonId));
     }
     
     // **NEW: Update authoritative state using InputStateEncoder**
@@ -310,6 +302,13 @@ InputEvent CursesInputLayer::createButtonPressEvent(uint8_t buttonId, uint32_t t
 
 InputEvent CursesInputLayer::createButtonReleaseEvent(uint8_t buttonId, uint32_t timestamp, uint32_t pressDuration) const {
     return InputEvent(InputEvent::Type::BUTTON_RELEASE, buttonId, timestamp, static_cast<int32_t>(pressDuration), 0);
+}
+
+InputEvent CursesInputLayer::createRawKeyboardEvent(uint8_t buttonId, uint32_t timestamp, int keyCode, bool uppercase) const {
+    // Use SYSTEM_EVENT type with specific deviceId to indicate raw keyboard input
+    // deviceId = buttonId, value = keyCode, context = uppercase flag
+    // This allows higher layers to interpret the semantic meaning
+    return InputEvent(InputEvent::Type::SYSTEM_EVENT, buttonId, timestamp, keyCode, uppercase ? 1 : 0);
 }
 
 uint8_t CursesInputLayer::getButtonIndex(uint8_t row, uint8_t col) const {

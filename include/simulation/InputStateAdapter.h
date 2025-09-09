@@ -8,11 +8,18 @@
 /**
  * @brief Adapter that converts CursesInputLayer events to InputState encoding
  * 
- * This demonstrates how to integrate the new bitwise state encoding approach
- * with the existing CursesInputLayer without breaking the current architecture.
+ * This adapter performs the critical role of semantic interpretation for
+ * platform-specific input. It takes raw keyboard events from CursesInputLayer
+ * (which only translates keys without interpretation) and applies the
+ * simulation-specific semantics (uppercase = press, lowercase = release).
+ * 
+ * This maintains proper architectural separation:
+ * - CursesInputLayer: Pure platform translation (stateless)
+ * - InputStateAdapter: Semantic interpretation and state management
+ * - InputStateProcessor: Gesture detection and control message generation
  * 
  * The adapter acts as a bridge:
- * CursesInputLayer → InputEvents → InputStateAdapter → InputState → ControlMessages
+ * CursesInputLayer → Raw Events → InputStateAdapter → InputState → ControlMessages
  */
 class InputStateAdapter {
 public:
@@ -57,6 +64,10 @@ private:
     
     /**
      * @brief Process a single input event into the state
+     * 
+     * Handles both legacy BUTTON_PRESS/RELEASE events and new raw keyboard
+     * events (SYSTEM_EVENT with keyboard data). Performs semantic interpretation
+     * of uppercase/lowercase keys to determine press/release behavior.
      */
     void processInputEvent(const InputEvent& event, InputState& state);
     

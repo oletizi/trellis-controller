@@ -28,8 +28,9 @@
  * Row 3: z x c v b n m ,  (bottom row, both upper/lower case)
  * 
  * Input Behavior:
- * - Uppercase keys: Generate BUTTON_PRESS events
- * - Lowercase keys/numbers: Generate BUTTON_RELEASE events  
+ * - All keys: Generate raw keyboard events with key code and case information
+ * - Platform layer only translates keys - no semantic interpretation
+ * - InputStateAdapter handles press/release semantics based on case
  * - ESC: System quit event
  * 
  * Note: This platform layer only handles key-to-event translation.
@@ -146,8 +147,9 @@ private:
     /**
      * @brief Check if key represents uppercase letter
      * 
-     * Used to determine hold vs tap behavior for simulation.
-     * Uppercase = hold, lowercase/numbers = tap.
+     * Used to pass case information in raw keyboard events.
+     * Higher layers (InputStateAdapter) will use this to determine
+     * press/release semantics (uppercase = press, lowercase = release).
      * 
      * @param key NCurses key code
      * @return true if key is uppercase letter
@@ -183,6 +185,21 @@ private:
      * @return Configured InputEvent for button release
      */
     InputEvent createButtonReleaseEvent(uint8_t buttonId, uint32_t timestamp, uint32_t pressDuration) const;
+    
+    /**
+     * @brief Create raw keyboard event (platform-agnostic)
+     * 
+     * Creates a raw keyboard event that passes key information without
+     * semantic interpretation. Higher layers (InputStateAdapter) will
+     * determine the actual button press/release semantics.
+     * 
+     * @param buttonId Linear button index (row * cols + col)
+     * @param timestamp When the key was pressed
+     * @param keyCode Raw keyboard key code
+     * @param uppercase Whether the key is uppercase
+     * @return Configured InputEvent for raw keyboard input
+     */
+    InputEvent createRawKeyboardEvent(uint8_t buttonId, uint32_t timestamp, int keyCode, bool uppercase) const;
     
     /**
      * @brief Convert row/col to linear button index

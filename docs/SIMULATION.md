@@ -186,85 +186,23 @@ The simulation uses a bitwise state encoding system that provides:
 
 ## Troubleshooting
 
-### Terminal Scrolling Issues
-
-If terminal scrolling is captured by the application:
-
-- Use **Shift + Page Up/Down** to scroll
-- Or press **ESC** to exit, view output, then restart
-- Consider using `screen` or `tmux` for better control
-
-### Parameter Lock Not Working
-
-Ensure you:
-
-1. Hold the key for at least 500ms (half a second)
-2. Keep the key held while adjusting parameters
-3. Use lowercase keys or numbers (not uppercase)
-
-### Display Issues
-
-If colors don't appear correctly:
-
-- Ensure your terminal supports 256 colors
-- Try a different terminal emulator
-- Check your TERM environment variable
-
 ## Keyboard Reference
 
 ### Quick Reference Card
 
 ```
 ┌─────────────────────────────────────────────┐
-│          TRELLIS SIMULATOR CONTROLS          │
+│          TRELLIS SIMULATOR CONTROLS         │
 ├─────────────────────────────────────────────┤
 │  Track 0 (RED):    1  2  3  4  5  6  7  8   │
 │  Track 1 (GREEN):  q  w  e  r  t  y  u  i   │
 │  Track 2 (BLUE):   a  s  d  f  g  h  j  k   │
 │  Track 3 (YELLOW): z  x  c  v  b  n  m  ,   │
 ├─────────────────────────────────────────────┤
-│  Quick Press = Toggle Step ON/OFF            │
-│  Hold ≥500ms = Enter Parameter Lock Mode     │
-│  While Holding = Adjust Parameters           │
-│  Release Hold = Exit Parameter Lock Mode     │
-│  ESC = Quit Simulation                       │
+│  Quick Press = Toggle Step ON/OFF           │
+│  Hold ≥500ms = Enter Parameter Lock Mode    │
+│  While Holding = Adjust Parameters          │
+│  Release Hold = Exit Parameter Lock Mode    │
+│  ESC = Quit Simulation                      │
 └─────────────────────────────────────────────┘
 ```
-
-## Development Notes
-
-### Architecture
-
-The simulation uses:
-
-- **ncurses** for terminal UI
-- **Input abstraction layers** for hardware independence
-- **Bitwise state encoding** for deterministic processing
-- **Real-time safe** data structures
-
-### Building from Source
-
-```bash
-# Configure for simulation
-cmake -B build-simulation -DBUILD_SIMULATION=ON
-
-# Build
-cmake --build build-simulation
-
-# Run
-./build-simulation/trellis_simulation
-```
-
-### Debug Output
-
-Enable verbose debug output by setting environment variables:
-
-```bash
-DEBUG=1 ./build-simulation/trellis_simulation
-```
-
-## See Also
-
-- [Project README](../README.md) - Overall project documentation
-- [CLAUDE.md](../CLAUDE.md) - Development guidelines and architecture
-- [Hardware Guide](https://learn.adafruit.com/adafruit-neotrellis-m4) - NeoTrellis M4 hardware reference

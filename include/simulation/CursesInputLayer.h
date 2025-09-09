@@ -122,6 +122,15 @@ private:
     std::map<int, KeyMapping> keyMap_;
     std::queue<InputEvent> eventQueue_;
     
+    // Physical key state tracking for sustained holds
+    struct KeyState {
+        bool isPressed = false;           ///< Current physical press state
+        uint32_t pressTimestamp = 0;      ///< When key was first pressed
+        uint8_t buttonId = 255;           ///< Associated button ID
+    };
+    
+    std::map<int, KeyState> keyStates_;   ///< Track physical state of each key
+    
     // Statistics for status reporting
     mutable InputLayerStatus status_;
     
@@ -159,13 +168,23 @@ private:
     /**
      * @brief Process single keyboard key input
      * 
-     * Now handles both event generation (for backward compatibility)
-     * and state management (primary interface). Updates currentState_
-     * using InputStateEncoder for authoritative state management.
+     * Now properly tracks physical key state to detect sustained holds.
+     * Handles key repeats from terminal without generating spurious events.
+     * Only generates BUTTON_PRESS on initial press and BUTTON_RELEASE on
+     * actual key release with proper hold duration calculation.
      * 
      * @param key NCurses key code
      */
     void processKeyInput(int key);
+    
+    /**
+     * @brief Update all tracked key states for hold detection
+     * 
+     * Checks all currently pressed keys and updates their hold duration.
+     * This enables proper parameter lock detection for sustained holds
+     * without being disrupted by keyboard repeat events.
+     */
+    void updateKeyStates();
     
     /**
      * @brief Create button press event

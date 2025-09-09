@@ -26,9 +26,11 @@
  * Row 3: z x c v b n m ,  (bottom row, both upper/lower case)
  * 
  * Input Behavior:
- * - Lowercase/numbers: Quick tap (press + immediate release)
- * - Uppercase letters: Hold until corresponding lowercase releases
+ * - Quick press: Toggle step ON/OFF
+ * - Hold ≥500ms: Enter parameter lock mode (use lowercase keys/numbers)
  * - ESC: System quit event
+ * 
+ * For complete input documentation and examples, see docs/SIMULATION.md
  * 
  * This implementation supports the full InputEvent system with proper
  * timestamping, debouncing simulation, and event filtering.

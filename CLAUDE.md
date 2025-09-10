@@ -127,6 +127,105 @@ class InputController {
 - **Before**: `sequencer->handleButton(id, pressed, time)` (platform-coupled)  
 - **After**: `controller->poll(); controller->getNextMessage(msg); sequencer->processMessage(msg)` (semantic)
 
+### Bank-Aware Parameter Lock Control System (MANDATORY)
+**CRITICAL**: This project implements a sophisticated bank-aware control system where parameter lock controls depend on the spatial location of the trigger button:
+
+```cpp
+// MANDATORY ARCHITECTURE: Bank-aware parameter controls
+struct ParameterLockBanks {
+    // Left Bank Parameter Lock Keys: <1-4 qwer asdf zxcv> (16 keys)
+    static constexpr uint8_t LEFT_BANK_BUTTONS[16] = {
+        0,1,2,3,    // Row 0: 1-4
+        8,9,10,11,  // Row 1: qwer  
+        16,17,18,19, // Row 2: asdf
+        24,25,26,27  // Row 3: zxcv
+    };
+    
+    // Right Bank Parameter Lock Keys: <5678 tyui ghjk bnm,> (16 keys)
+    static constexpr uint8_t RIGHT_BANK_BUTTONS[16] = {
+        4,5,6,7,     // Row 0: 5678
+        12,13,14,15, // Row 1: tyui
+        20,21,22,23, // Row 2: ghjk  
+        28,29,30,31  // Row 3: bnm,
+    };
+};
+
+// Bank-aware control mapping
+class BankAwareControls {
+public:
+    static ControlMapping getControlsForTrigger(uint8_t triggerButtonId) {
+        bool triggerInLeftBank = isLeftBankButton(triggerButtonId);
+        
+        if (triggerInLeftBank) {
+            // LEFT bank trigger → RIGHT bank controls
+            return ControlMapping{
+                .decrementNote = 28,    // 'b' button
+                .incrementNote = 20,    // 'g' button  
+                .decrementVelocity = 29, // 'n' button
+                .incrementVelocity = 21  // 'h' button
+            };
+        } else {
+            // RIGHT bank trigger → LEFT bank controls  
+            return ControlMapping{
+                .decrementNote = 24,    // 'z' button
+                .incrementNote = 16,    // 'a' button
+                .decrementVelocity = 25, // 'x' button
+                .incrementVelocity = 17  // 's' button
+            };
+        }
+    }
+    
+private:
+    static bool isLeftBankButton(uint8_t buttonId) {
+        uint8_t column = buttonId % 8;
+        return column < 4;  // Columns 0-3 = left bank
+    }
+};
+```
+
+#### Bank-Aware Control Rules (MANDATORY FOR ALL AGENTS):
+
+1. **Spatial Separation**: Parameter lock trigger and controls are ALWAYS in opposite banks
+2. **Only 4 Control Functions**: 
+   - Decrement MIDI note value
+   - Increment MIDI note value  
+   - Decrement MIDI velocity value
+   - Increment MIDI velocity value
+3. **Bank-Specific Mapping**: Control keys change based on trigger location
+4. **NO Unauthorized Controls**: No octave, gate, probability, or other controls
+5. **Deterministic Mapping**: Same trigger button always maps to same control buttons
+
+#### Control Key Mappings:
+
+**When parameter lock key is in LEFT bank → control keys are in RIGHT bank:**
+- `b` (button 28) = Decrement MIDI note value
+- `g` (button 20) = Increment MIDI note value  
+- `n` (button 29) = Decrement MIDI velocity value
+- `h` (button 21) = Increment MIDI velocity value
+
+**When parameter lock key is in RIGHT bank → control keys are in LEFT bank:**
+- `z` (button 24) = Decrement MIDI note value
+- `a` (button 16) = Increment MIDI note value
+- `x` (button 25) = Decrement MIDI velocity value
+- `s` (button 17) = Increment MIDI velocity value
+
+#### Implementation Requirements:
+- **Visual Feedback**: Highlight active control keys based on current trigger bank
+- **Inactive Keys**: All non-control keys must be inactive during parameter lock
+- **Bank Detection**: Runtime determination of trigger bank and corresponding controls
+- **Error Prevention**: Reject any control key presses not matching current bank mapping
+
+#### Usage Examples:
+```cpp
+// Example: Left bank trigger
+// SHIFT+q (button 9) enters parameter lock
+// Available controls: b,g,n,h (right bank buttons 28,20,29,21)
+
+// Example: Right bank trigger  
+// SHIFT+5 (button 4) enters parameter lock
+// Available controls: z,a,x,s (left bank buttons 24,16,25,17)
+```
+
 ### Arduino Platform Guidelines
 **CRITICAL**: Arduino `.ino` files must remain as thin as possible and contain ONLY device-specific translation code:
 
@@ -525,6 +624,8 @@ try {
 ❌ **NEVER skip error checking** for hardware operations  
 ❌ **NEVER use recursion** without bounded depth  
 ❌ **NEVER EVER leave temporary files in the top-level directory** - CLEAN UP YOUR TURDS IMMEDIATELY  
+❌ **NEVER implement unauthorized parameter controls** - only note up/down, velocity up/down allowed  
+❌ **NEVER ignore the bank-aware control system** - controls must be in opposite bank from trigger  
 
 ## Success Criteria for AI Agents
 
@@ -539,6 +640,8 @@ try {
 ✅ **Real-time constraints met**  
 ✅ **Tests maintain coverage** >80%  
 ✅ **Top-level directory remains pristine** - no temporary files or build turds left behind  
+✅ **Bank-aware controls implemented** - parameter controls in opposite bank from trigger  
+✅ **Only authorized controls** - exactly 4 control functions (note up/down, velocity up/down)  
 
 ## Future Expansion
 

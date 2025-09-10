@@ -1,781 +1,667 @@
-# Implementation Plan: Simulation Control Keys & Parameter Locks
+# SHIFT-Based Parameter Lock Implementation Plan
 
-!!!IMPORTANT: CRITICAL ISSUE
+## Executive Summary
 
-## CRITICAL: Architecturally Correct Solution (2025-09-10)
+This document outlines a complete redesign of parameter lock controls using **SHIFT modifier keys** instead of
+timing-based detection. This eliminates all race conditions, ncurses timing limitations, and provides deterministic,
+user-friendly parameter lock functionality.
 
-### Architectural Violation in Previous Solution
+## Architecture Overview
 
-**CRITICAL FLAW**: The previously proposed solution (sections below) introduces a **fundamental architectural violation** by creating multiple state containers (`currentPressedKeys_`, `previousPressedKeys_`) instead of maintaining the project's core architectural principle: **single bitwise-encoded state variable**.
+### Current Problems with Timing-Based Approach
 
-#### Project's Sophisticated State Architecture
+**CRITICAL FLAWS IDENTIFIED:**
 
-This project uses a **sophisticated bitwise state encoding** where ALL state information is maintained in a single 64-bit `InputState` variable:
+- **Timing Race Conditions**: 200ms timeout < 500ms parameter lock threshold = impossible locks
+- **ncurses Limitations**: Cannot reliably detect key holds beyond system repeat rates
+- **Non-Deterministic**: Human timing variability makes parameter locks unreliable
+- **Complex State Management**: Multiple timeout states create architectural complexity
 
-```cpp
-// Core Architecture: Single Source of Truth
-struct InputState {
-    uint64_t state;  // ALL state fits in 64 bits
-    // Bitwise encoding for: button states, timing, parameter locks, etc.
-};
+### NEW APPROACH: SHIFT-Based Parameter Locks
 
-// Pure functional state management
-class InputStateEncoder {
-    InputState encodeInputEvent(const InputState& current, const InputEvent& event);
-    // All state transitions are pure functions
-};
+**CORE PRINCIPLE**: Replace all timing-based logic with explicit SHIFT modifier key detection
+
+#### Key Benefits:
+
+- **Deterministic**: SHIFT+key always enters parameter lock, key alone always exits
+- **No Timing Dependencies**: Works perfectly with ncurses key repeat behavior
+- **User Friendly**: Clear, predictable interaction model familiar to all users
+- **Architecturally Simple**: Clean state transitions with explicit user intent
+- **Platform Agnostic**: Works identically on hardware and simulation
+
+## Complete Key Mapping Design
+
+### QWERTY-to-Trellis Layout
+
+```
+NeoTrellis 4x8 Grid Layout:
+Row 0 (Track 0): [00][01][02][03][04][05][06][07] 
+Row 1 (Track 1): [08][09][10][11][12][13][14][15]
+Row 2 (Track 2): [16][17][18][19][20][21][22][23]
+Row 3 (Track 3): [24][25][26][27][28][29][30][31]
+
+QWERTY Keyboard Mapping:
+Row 0 (RED):    1  2  3  4  5  6  7  8
+Row 1 (GREEN):  q  w  e  r  t  y  u  i  
+Row 2 (BLUE):   a  s  d  f  g  h  j  k
+Row 3 (YELLOW): z  x  c  v  b  n  m  ,
 ```
 
-#### Architectural Principles Violated
+### SHIFT-Based Parameter Lock Controls
 
-The previous solution violates these **critical architectural principles**:
+#### Parameter Lock Entry/Exit Pattern:
 
-1. **Single Source of Truth**: One 64-bit InputState contains everything
-2. **Pure Functional**: State transitions are pure functions without side effects
-3. **Platform Abstraction**: Input layers detect inputs, don't manage application state
-4. **Bitwise Encoding**: All state fits in the structured 64-bit value
-5. **No Distributed State**: No separate state containers across components
+```
+SHIFT+<key> = Enter parameter lock mode for that specific step
+<key> alone = Exit parameter lock mode and return to normal operation
 
-#### Correct Architectural Solution
+Examples:
+- SHIFT+q = Enter parameter lock mode for Track 1, Step 0 (green track, first step)
+- q (alone) = Exit parameter lock mode  
+- SHIFT+5 = Enter parameter lock mode for Track 0, Step 4 (red track, fifth step)
+- 5 (alone) = Exit parameter lock mode
+```
 
-**PRINCIPLE**: Fix INPUT DETECTION, not state management. The issue is in `CursesInputLayer`'s ability to detect physical key state, NOT in the state management architecture.
+#### Bank-Aware Control Keys During Parameter Lock Mode:
 
-##### What CursesInputLayer Should Do (CORRECT):
+```
+The control keys available during parameter lock mode depend on which BANK the
+parameter lock key belongs to:
+
+Left Bank Parameter Lock Keys: <1-4 qwer asdf zxcv> (16 keys)
+Right Bank Parameter Lock Keys: <5678 tyui ghjk bnm,> (16 keys)
+
+When parameter lock key is in LEFT bank → control keys are in RIGHT bank:
+- b = Decrement MIDI note value
+- g = Increment MIDI note value  
+- n = Decrement MIDI velocity value
+- h = Increment MIDI velocity value
+
+When parameter lock key is in RIGHT bank → control keys are in LEFT bank:
+- z = Decrement MIDI note value
+- a = Increment MIDI note value
+- x = Decrement MIDI velocity value
+- s = Increment MIDI velocity value
+
+NOTE: Only these 4 control functions are authorized. All other keys
+are inactive during parameter lock mode.
+```
+
+## Implementation Architecture
+
+### 1. Enhanced Key Detection in CursesInputLayer
+
+**NEW FUNCTIONALITY**: Detect and report SHIFT state alongside key presses
 
 ```cpp
-class CursesInputLayer {
+// Enhanced CursesInputLayer changes
+class CursesInputLayer : public IInputLayer {
 private:
-    // COMPLETELY STATELESS - NO memory of previous polls
-    // NO physicalKeysDetected_, NO previousPhysicalKeys_
+    bool shiftPressed_ = false;           // Current SHIFT key state
+    std::set<int> currentKeysPressed_;    // All currently pressed keys
+    
+    // New methods for SHIFT detection
+    bool isShiftKey(int key) const;       // Detect platform SHIFT keys
+    void updateShiftState(int key, bool pressed);  // Track SHIFT state
     
 public:
-    bool poll() override {
-        // Step 1: Detect ONLY what ncurses currently sees (stateless)
-        std::vector<int> currentlyDetectedKeys = detectCurrentPhysicalKeys();
-        
-        // Step 2: Report current state to InputStateEncoder
-        // InputStateEncoder compares against its bitwise state to determine press/release
-        reportCurrentState(currentlyDetectedKeys);
-        
-        // Step 3: InputStateEncoder handles ALL state management and event generation
-        return hasEvents();
-    }
+    // Enhanced event generation
+    InputEvent createShiftKeyEvent(uint8_t buttonId, uint32_t timestamp, bool shiftModifier) const;
 };
-```
 
-##### What InputStateEncoder Does (UNCHANGED):
-
-```cpp
-class InputStateEncoder {
-    // Maintains THE ONLY state container
-    InputState encodeInputEvent(const InputState& current, const InputEvent& event) {
-        // Pure functional state transition
-        // ALL state management happens here
-        // Returns new InputState with all timing, locks, etc.
-    }
-};
-```
-
-#### Key Architectural Corrections
-
-1. **CursesInputLayer Responsibility**: ONLY detect physical key presence for event generation
-2. **InputStateEncoder Responsibility**: ALL state management in single bitwise InputState
-3. **No Duplicate State**: No `currentPressedKeys_` alongside `InputState` - that's distributed state
-4. **Pure Functions**: State transitions remain pure without side effects
-5. **Platform Independence**: Business logic stays in core, platform code only detects inputs
-
-#### Implementation Correction - Truly Stateless CursesInputLayer
-
-**The correct architecture flow**:
-1. **CursesInputLayer.poll()**: "Keys currently detected: [a, b, c]" (no memory)
-2. **InputStateEncoder.updateFromCurrentDetection()**: Compares [a,b,c] against bitwise state
-3. **InputStateEncoder**: Generates PRESS/RELEASE events and updates bitwise state
-4. **InputStateEncoder**: Maintains ALL timing, locks, gesture state in single 64-bit value
-
-**Fix in CursesInputLayer.cpp**:
-
-```cpp
-bool CursesInputLayer::poll() {
-    // STATELESS: Only detect what ncurses sees NOW, no memory of previous polls
-    std::vector<uint8_t> currentlyDetectedButtons;
-    
-    // Detect what ncurses sees right now (pure sensor reading)
-    nodelay(stdscr, TRUE);
-    int key;
-    while ((key = getch()) != ERR) {
-        uint8_t buttonId = mapKey(key);
-        if (buttonId != INVALID_BUTTON) {
-            currentlyDetectedButtons.push_back(buttonId);
-        }
+// Key processing with SHIFT awareness
+void CursesInputLayer::processKeyInput(int key) {
+    // 1. Update SHIFT state first
+    if (isShiftKey(key)) {
+        updateShiftState(key, true);
+        return; // Don't generate button events for SHIFT itself
     }
     
-    // Pass current detection to InputStateEncoder for comparison
-    // InputStateEncoder compares against its bitwise state to generate events
-    if (inputStateEncoder_) {
-        inputStateEncoder_->updateFromCurrentDetection(currentlyDetectedButtons, clock_->getCurrentTimeMs());
+    // 2. Process regular keys with current SHIFT state
+    uint8_t row, col;
+    if (getKeyMapping(key, row, col)) {
+        uint8_t buttonId = getButtonIndex(row, col);
+        
+        // Generate press event with SHIFT modifier information
+        InputEvent event = createShiftKeyEvent(buttonId, clock_->getCurrentTime(), shiftPressed_);
+        eventQueue_.push(event);
+        
+        // Track key for release detection
+        currentKeysPressed_.insert(key);
     }
-    
-    // NO state storage, NO previousPhysicalKeys_, completely stateless
-    return inputStateEncoder_ && inputStateEncoder_->hasEvents();
 }
 ```
 
-**Critical Distinction**:
-- `CursesInputLayer::poll()` = **Pure sensor reading** (what ncurses sees RIGHT NOW)
-- `InputStateEncoder.state` = **Stateful comparison** (detects press/release by comparing current vs previous)
-- `InputState.state` = **Application state** (what the sequencer uses)
-- CursesInputLayer has ZERO memory, InputStateEncoder has ALL the state
+### 2. SHIFT-Aware InputEvent Structure
 
-#### Why This Maintains Architecture Integrity
-
-1. **Single State Source**: InputState remains the ONLY application state container
-2. **Pure Functions**: InputStateEncoder.encodeInputEvent() remains pure
-3. **Clear Separation**: Input detection ≠ application state management
-4. **Testability**: Easy to mock input detection without affecting state logic
-5. **Platform Independence**: Core logic unchanged, only input detection improved
-
-### Success Criteria for Architectural Correction
-
-- [ ] CursesInputLayer has ZERO memory of previous polls (completely stateless)
-- [ ] CursesInputLayer only reports "what keys are detected RIGHT NOW"
-- [ ] InputStateEncoder does ALL state comparison (current vs previous)
-- [ ] InputStateEncoder generates ALL press/release events
-- [ ] InputStateEncoder remains the ONLY state management component  
-- [ ] All state transitions remain pure functions in single 64-bit InputState
-- [ ] Platform abstraction boundaries maintained
-- [ ] Parameter locks work with proper hold detection
-- [ ] No artificial timeouts or state tracking in input layer
-
-**IMPLEMENTATION PRIORITY**: This architectural correction must be implemented BEFORE any other changes. The solution below violates core architectural principles and must be replaced.
-
----
-
-## Overview
-
-This document tracks the implementation of simulation control keys for the Trellis Controller, focusing on parameter
-lock functionality and timing requirements.
-
-## Addendum: Parameter Lock Issue Analysis (2025-09-10)
-
-### Issue Discovered
-
-During testing of parameter lock functionality in simulation, the following behavior was observed:
-
-**Test Case**: Hold 'a' key + press 'b' key to trigger parameter lock mode
-**Expected**: Parameter lock mode should activate when 'a' is held for ≥500ms, then 'b' should function as a control key
-**Actual**: Parameter lock mode never activates; both keys are treated as independent button presses
-
-### Root Cause Analysis
-
-Investigation revealed a critical timing mismatch in the `CursesInputLayer` implementation:
-
-1. **Parameter Lock Requirement**: `TrellisGestureDetector` requires a key to be held continuously for **≥500ms** to
-   enter parameter lock mode
-2. **Simulation Auto-Release**: `CursesInputLayer` automatically releases keys after **200ms** via
-   `KEY_RELEASE_TIMEOUT_MS`
-3. **Timing Conflict**: 200ms auto-release < 500ms parameter lock threshold = **impossible to achieve parameter locks**
-
-#### Technical Details
+**ENHANCED**: InputEvent carries SHIFT modifier information
 
 ```cpp
-// In CursesInputLayer.cpp
-const uint32_t KEY_RELEASE_TIMEOUT_MS = 200;  // ← Too short!
-
-// In TrellisGestureDetector.cpp  
-const uint32_t PARAMETER_LOCK_HOLD_TIME_MS = 500;  // ← Required threshold
-```
-
-**Sequence of Events**:
-
-1. User presses 'a' at T=0ms
-2. CursesInputLayer generates BUTTON_PRESS event
-3. At T=200ms, CursesInputLayer auto-generates BUTTON_RELEASE event
-4. At T=500ms, user is still physically holding 'a', but system thinks it's released
-5. Parameter lock threshold never reached
-
-## Critical Architectural Correction (2025-09-10)
-
-### Fundamental Flaw in Timeout-Based Approach
-
-**CRITICAL REALIZATION**: The previously proposed "increase timeout to 800ms" solution is **fundamentally incorrect**
-and incompatible with parameter lock mode requirements. This correction addresses a critical architectural
-misunderstanding.
-
-#### Why ANY Timeout is Incompatible with Parameter Locks
-
-**Parameter Lock Requirements**:
-
-- Users must hold keys for potentially **many seconds** or **indefinitely**
-- Parameter adjustment requires continuous key holding during the entire session
-- Hardware behavior: Keys remain pressed until physically released
-- No artificial timeouts - keys stay pressed as long as user holds them
-
-**Timeout-Based Problems**:
-
-1. **200ms timeout**: Too short for ≥500ms parameter lock detection
-2. **800ms timeout**: Still incompatible - what if user holds for 10 seconds?
-3. **10 second timeout**: Still fails - user may hold indefinitely
-4. **ANY timeout**: Fundamentally wrong - creates artificial releases that don't exist in hardware
-
-#### Hardware vs Simulation Behavior Mismatch
-
-**Hardware (NeoTrellis)**:
-
-```
-Key pressed → BUTTON_PRESS event
-Key held → [no events, button remains in pressed state]
-Key released → BUTTON_RELEASE event
-```
-
-**Current Simulation (INCORRECT)**:
-
-```
-Key pressed → BUTTON_PRESS event
-[Timeout expires] → BUTTON_RELEASE event (ARTIFICIAL!)
-Key still held → [system thinks released, but user still holding]
-```
-
-**Required Simulation (CORRECT)**:
-
-```
-Key pressed → BUTTON_PRESS event  
-Key held → [no events, button remains in pressed state]
-Key released → BUTTON_RELEASE event (only when actually released)
-```
-
-### Correct Solution: Explicit Key State Tracking
-
-**Core Principle**: Track which keys are **actually detected** by ncurses in each poll cycle, compare with previous poll
-to detect **real state changes**.
-
-#### Implementation Approach
-
-```cpp
-class CursesInputLayer {
-private:
-    std::unordered_set<int> currentPressedKeys_;   // Keys detected this poll
-    std::unordered_set<int> previousPressedKeys_;  // Keys detected last poll
-    std::unordered_map<int, uint32_t> pressStartTimes_; // When each key was first pressed
-    
-public:
-    bool poll() override {
-        // Step 1: Detect which keys are currently being pressed
-        std::unordered_set<int> detectedKeys;
-        
-        // Non-blocking key detection - check all possible keys
-        nodelay(stdscr, TRUE);  // Non-blocking mode
-        int key;
-        while ((key = getch()) != ERR) {
-            detectedKeys.insert(key);
-        }
-        
-        // Step 2: Compare with previous poll to detect state changes
-        uint32_t currentTime = clock_->getCurrentTimeMs();
-        
-        // Generate PRESS events for newly detected keys
-        for (int key : detectedKeys) {
-            if (previousPressedKeys_.find(key) == previousPressedKeys_.end()) {
-                // Key newly pressed
-                InputEvent event;
-                event.type = InputEventType::BUTTON_PRESS;
-                event.buttonId = mapKeyToButtonId(key);
-                event.timestamp = currentTime;
-                eventQueue_.push_back(event);
-                
-                pressStartTimes_[key] = currentTime;
-            }
-        }
-        
-        // Generate RELEASE events for keys no longer detected
-        for (int key : previousPressedKeys_) {
-            if (detectedKeys.find(key) == detectedKeys.end()) {
-                // Key released
-                InputEvent event;
-                event.type = InputEventType::BUTTON_RELEASE;
-                event.buttonId = mapKeyToButtonId(key);
-                event.timestamp = currentTime;
-                eventQueue_.push_back(event);
-                
-                pressStartTimes_.erase(key);
-            }
-        }
-        
-        // Step 3: Update state for next poll
-        previousPressedKeys_ = detectedKeys;
-        currentPressedKeys_ = detectedKeys;
-        
-        return !eventQueue_.empty();
-    }
-};
-```
-
-#### Key Implementation Changes Required
-
-**1. Remove ALL Timeout Logic**:
-
-```cpp
-// REMOVE these completely:
-const uint32_t KEY_RELEASE_TIMEOUT_MS = 800;  // ← DELETE
-std::unordered_map<int, uint32_t> keyPressStartTimes_; // ← REPURPOSE for gesture detection only
-```
-
-**2. Implement True State Detection**:
-
-```cpp
-// ADD proper state tracking:
-std::unordered_set<int> currentPressedKeys_;   // What ncurses sees NOW
-std::unordered_set<int> previousPressedKeys_;  // What ncurses saw LAST poll
-```
-
-**3. Fix Poll Logic**:
-
-```cpp
-bool poll() {
-    // Check what keys ncurses currently detects
-    detectCurrentlyPressedKeys();
-    
-    // Generate events only for actual state changes
-    generatePressEvents();   // For newly detected keys
-    generateReleaseEvents(); // For no-longer-detected keys
-    
-    // NO artificial timeouts - only real state changes
-    return hasEvents();
-}
-```
-
-### Why This Mirrors Hardware Exactly
-
-**Hardware Behavior**: Button matrix scan detects which buttons are currently pressed, generates events only on state
-changes.
-
-**Corrected Simulation**: ncurses key detection finds which keys are currently pressed, generates events only on state
-changes.
-
-**Perfect Match**: Both systems track **actual current state** and generate events only on **real transitions**.
-
-### Implementation Priority
-
-**CRITICAL**: This completely replaces the flawed timeout approach. The timeout-based solution must be **completely
-removed** and replaced with proper state tracking.
-
-**Files to Modify**:
-
-- `src/simulation/CursesInputLayer.cpp` - Remove timeout logic, add state tracking
-- `src/simulation/CursesInputLayer.h` - Update member variables and interface
-- Remove any references to `KEY_RELEASE_TIMEOUT_MS`
-
-### Success Criteria (Corrected)
-
-- [ ] Keys can be held indefinitely without artificial releases
-- [ ] Parameter lock mode works with any hold duration (500ms to minutes)
-- [ ] Only actual key releases generate BUTTON_RELEASE events
-- [ ] Simulation behavior matches hardware exactly
-- [ ] No timeout-based logic anywhere in input system
-
-### Previous Analysis Remains Valid (Below Timeout Fix)
-
-The analysis below correctly identifies implementation gaps, but the **timeout-based solution was fundamentally wrong**.
-The state tracking approach above addresses the core issue while the detailed implementation plan below remains valuable
-for the complete feature set.
-
-### Implementation Priority
-
-**High Priority**: This issue completely blocks parameter lock functionality in simulation, which is critical for
-development and testing workflows.
-
-**Risk Level**: Low - change is isolated to simulation layer with clear fallback behavior
-
-**Effort**: Small - single constant change with optional enhancements
-
-### Success Criteria
-
-- [ ] Parameter lock mode activates when holding any key ≥500ms
-- [ ] Control keys function correctly during parameter lock mode
-- [ ] Normal key press/release behavior unchanged
-- [ ] No input lag or responsiveness degradation
-- [ ] Documentation updated to reflect timing requirements
-
-IMPORTANT: Ignore everything below this line. It's for historical reference only.
-__END__
-
-## Problem Analysis
-
-After reviewing the simulation documentation (`docs/SIMULATION.md`) and current implementation, there are several
-critical discrepancies between the documented behavior and actual implementation:
-
-### Current Architecture Overview
-
-The current input processing pipeline is:
-
-```
-CursesInputLayer → InputController → InputStateProcessor → ControlMessages
-```
-
-However, there are **fundamental gaps** in the current implementation:
-
-1. **Missing State Encoder**: CursesInputLayer generates raw keyboard events but has no proper InputStateEncoder
-   integration
-2. **Missing Control Key Logic**: Parameter lock control keys (b/g/n/h vs z/a/x/s) aren't implemented
-3. **Incomplete Hold/Release Detection**: The current timing-based parameter lock entry isn't working as documented
-4. **Missing Physical Key State Tracking**: No distinction between key press, hold, and release events
-
-### Critical Discrepancies
-
-#### 1. **Parameter Lock Entry Method**
-
-- **Documented**: Hold key ≥500ms, keep holding while adjusting parameters, release to exit
-- **Current**: Release after ≥500ms triggers entry, but then immediately exits
-
-#### 2. **Control Key Mapping**
-
-- **Documented**: Bank-specific control keys (left bank uses right bank controls, vice versa)
-- **Current**: No control key differentiation implemented
-
-#### 3. **Physical Key State Tracking**
-
-- **Documented**: Keys should support press, hold (≥500ms), and release states
-- **Current**: No proper physical key state tracking - every key input is treated as instantaneous
-
-#### 4. **Hold State Management**
-
-- **Documented**: Must keep trigger key held during entire parameter lock session
-- **Current**: No continuous hold state tracking
-
-## Implementation Strategy
-
-### Phase 1: Fix Core State Architecture (Priority 1)
-
-#### 1.1 Fix CursesInputLayer Physical Key State Tracking
-
-**Issue**: CursesInputLayer treats every key input as instantaneous, but documentation requires proper
-press/hold/release detection
-
-**Files to modify**:
-
-- `/Users/orion/work/trellis-controller/src/simulation/CursesInputLayer.cpp`
-- `/Users/orion/work/trellis-controller/include/simulation/CursesInputLayer.h`
-
-**Changes**:
-
-- Implement proper hold tracking per key (track press timestamps)
-- Generate proper BUTTON_PRESS events immediately on key press
-- Generate proper BUTTON_RELEASE events on key release with accurate duration
-- Add physical key state tracking to detect actual press/release transitions
-- Support continuous key hold detection for parameter lock entry
-
-#### 1.2 Implement InputStateEncoder Integration
-
-**Issue**: CursesInputLayer has encoder hooks but they're not properly used in main.cpp
-
-**Files to modify**:
-
-- `/Users/orion/work/trellis-controller/src/simulation/main.cpp`
-
-**Changes**:
-
-- Create and inject InputStateEncoder into CursesInputLayer
-- Ensure proper encoder initialization and dependency injection
-
-#### 1.3 Fix InputStateProcessor Parameter Lock Logic
-
-**Issue**: Current logic triggers entry on release, but documentation requires continuous hold
-
-**Files to modify**:
-
-- `/Users/orion/work/trellis-controller/src/core/InputStateProcessor.cpp`
-
-**Changes**:
-
-- Modify parameter lock entry detection to trigger on button HOLD reaching threshold (not release)
-- Modify parameter lock exit to trigger on trigger button RELEASE (while in lock mode)
-- Ensure lock state persists while trigger button remains held
-
-### Phase 2: Implement Control Key Mapping (Priority 2)
-
-#### 2.1 Add Bank Detection Logic
-
-**Issue**: No logic to determine left vs right bank positioning
-
-**New file**:
-
-- `/Users/orion/work/trellis-controller/include/simulation/ControlKeyMapper.h`
-- `/Users/orion/work/trellis-controller/src/simulation/ControlKeyMapper.cpp`
-
-**Functionality**:
-
-- Determine which bank (left/right) a button belongs to
-- Map control keys based on trigger button bank
-- Validate control key presses during parameter lock
-
-#### 2.2 Add Control Key Processing
-
-**Files to modify**:
-
-- `/Users/orion/work/trellis-controller/src/core/InputStateProcessor.cpp`
-
-**Changes**:
-
-- Add control key mapping logic for parameter adjustment
-- Implement bank-specific control key validation
-- Map control keys to parameter types (pitch, velocity, etc.)
-
-### Phase 3: Implement Proper Hold Detection (Priority 3)
-
-#### 3.1 Add Real-time Hold Detection
-
-**Issue**: Current system only detects holds on release, not during continuous press
-
-**Files to modify**:
-
-- `/Users/orion/work/trellis-controller/src/simulation/CursesInputLayer.cpp`
-- `/Users/orion/work/trellis-controller/src/core/InputStateEncoder.cpp`
-
-**Changes**:
-
-- Track press timestamps per button
-- Generate timing events for ongoing button presses
-- Enable real-time parameter lock entry (while button still held)
-
-#### 3.2 Fix Timing State Updates
-
-**Files to modify**:
-
-- `/Users/orion/work/trellis-controller/src/core/InputController.cpp`
-
-**Changes**:
-
-- Enable proper timing-based state updates in `updateTimingState()` method
-- Ensure continuous parameter lock state while trigger button is held
-
-### Phase 4: Enhanced User Experience (Priority 4)
-
-#### 4.1 Add Visual Feedback
-
-**Files to modify**:
-
-- `/Users/orion/work/trellis-controller/src/core/StepSequencer.cpp` (if parameter lock display logic exists)
-
-**Changes**:
-
-- Add proper visual indicators for parameter lock mode
-- Show active control keys during parameter lock
-- Disable visual feedback for inactive keys during parameter lock
-
-#### 4.2 Add Debug Output Enhancement
-
-**Files to modify**:
-
-- All modified files
-
-**Changes**:
-
-- Add comprehensive debug logging for parameter lock state transitions
-- Log control key mappings and parameter adjustments
-- Add visual debugging for hold state tracking
-
-## Detailed Implementation Steps
-
-### Step 1: Fix Core Hold/Release Detection
-
-**Target File**: `/Users/orion/work/trellis-controller/src/simulation/CursesInputLayer.cpp`
-
-**Core Issue**: Currently, the CursesInputLayer treats every key as an instantaneous event based on ncurses getch(), but
-the documentation requires proper physical key press/hold/release detection. This needs to be replaced with proper key
-state tracking that can distinguish between initial press, continuous hold, and release events.
-
-**Required Changes**:
-
-```cpp
-class CursesInputLayer {
-private:
-    std::unordered_map<int, uint32_t> keyPressStartTimes_;  // Track press timestamps
-    std::unordered_set<int> currentlyPressedKeys_;          // Track held keys
-    
-    // New methods:
-    bool isKeyCurrentlyPressed(int key) const;
-    uint32_t getKeyHoldDuration(int key) const;
-    void updateHoldingKeys();  // Generate timing updates for held keys
-};
-```
-
-### Step 2: Fix InputStateEncoder Integration
-
-**Target File**: `/Users/orion/work/trellis-controller/src/simulation/main.cpp`
-
-**Core Issue**: The InputStateEncoder exists but isn't properly integrated into the CursesInputLayer to provide proper
-state management.
-
-**Required Changes**:
-
-```cpp
-void setupInputController() {
-    // Create InputStateEncoder
-    auto encoder = std::make_unique<InputStateEncoder>(InputStateEncoder::Dependencies{
-        .clock = clock_.get(),
-        .debugOutput = debugOutput_.get()
-    });
-    
-    // Set encoder on CursesInputLayer
-    inputLayer->setInputStateEncoder(encoder.release()); // Transfer ownership
-}
-```
-
-### Step 3: Fix Parameter Lock State Logic
-
-**Target File**: `/Users/orion/work/trellis-controller/src/core/InputStateProcessor.cpp`
-
-**Core Issue**: Parameter lock should be entered when button is HELD for ≥500ms (not on release), and should remain
-active while button is held.
-
-**Current Logic Problems**:
-
-- Entry triggers on button release after long hold → **WRONG**
-- Exit triggers when lock button is released → **CORRECT**
-- No logic for continuous hold during parameter lock → **MISSING**
-
-**Required Changes**:
-
-```cpp
-bool InputStateProcessor::isParameterLockEntry(const InputState& current, const InputState& previous) const {
-    // Entry: Transition from not-locked to locked
-    // This should be triggered by InputStateEncoder when hold threshold is reached
-    // while button is STILL HELD
-    return current.isParameterLockActive() && !previous.isParameterLockActive();
-}
-
-bool InputStateProcessor::isParameterLockExit(const InputState& current, const InputState& previous) const {
-    // Exit: Release of lock button while in parameter lock mode
-    if (!previous.isParameterLockActive()) return false;
-    
-    uint8_t lockButtonId = previous.getLockButtonId();
-    bool wasPressed = previous.isButtonPressed(lockButtonId);
-    bool nowReleased = !current.isButtonPressed(lockButtonId);
-    
-    return wasPressed && nowReleased;
-}
-```
-
-### Step 4: Implement Control Key Mapping
-
-**New Files**:
-
-- `/Users/orion/work/trellis-controller/include/simulation/ControlKeyMapper.h`
-- `/Users/orion/work/trellis-controller/src/simulation/ControlKeyMapper.cpp`
-
-**Functionality**:
-
-```cpp
-class ControlKeyMapper {
-public:
-    enum class Bank { LEFT, RIGHT };
-    enum class ControlFunction { 
-        PITCH_DOWN, PITCH_UP, 
-        VELOCITY_DOWN, VELOCITY_UP 
+// Enhanced InputEvent with SHIFT support
+struct InputEvent {
+    enum Type {
+        BUTTON_PRESS,
+        BUTTON_RELEASE, 
+        SHIFT_BUTTON_PRESS,    // NEW: Button press with SHIFT held
+        SHIFT_BUTTON_RELEASE   // NEW: Button release with SHIFT held
     };
     
-    Bank getButtonBank(uint8_t buttonId) const;
-    Bank getOppositeBank(Bank bank) const;
-    std::optional<ControlFunction> getControlFunction(uint8_t buttonId, Bank activeBank) const;
-    bool isControlKeyActive(uint8_t buttonId, uint8_t lockButtonId) const;
+    Type type;
+    uint8_t buttonId;
+    uint32_t timestamp;
+    int32_t param1;           // Duration for releases, modifier flags for presses
+    int32_t param2;           // Future use
+    
+    // Convenience methods
+    bool hasShiftModifier() const { return type == SHIFT_BUTTON_PRESS || type == SHIFT_BUTTON_RELEASE; }
+    uint32_t getPressDuration() const { return static_cast<uint32_t>(param1); }
 };
 ```
 
-### Step 5: Integration Points
+### 3. SHIFT-Based GestureDetector
 
-**Files to modify for integration**:
+**COMPLETE REWRITE**: Replace timing-based logic with SHIFT-based detection
 
-1. **InputStateProcessor.cpp**: Add control key processing logic
-2. **StepSequencer.cpp**: Add parameter adjustment handling
-3. **CursesInputLayer.cpp**: Add hold state monitoring
-4. **InputController.cpp**: Ensure timing updates work properly
+```cpp
+class ShiftBasedGestureDetector : public IGestureDetector {
+private:
+    struct ButtonState {
+        bool pressed = false;
+        bool isParameterLockTrigger = false;  // Was this button used to enter param lock?
+    };
+    
+    std::array<ButtonState, 32> buttonStates_;
+    
+    struct ParameterLockState {
+        bool active = false;
+        uint8_t triggerButtonId = 255;  // Which button triggered parameter lock
+        uint8_t lockedTrack = 255;
+        uint8_t lockedStep = 255;
+    } paramLockState_;
+    
+public:
+    uint8_t processInputEvent(const InputEvent& event, 
+                             std::vector<ControlMessage::Message>& messages) override {
+        
+        switch (event.type) {
+        case InputEvent::SHIFT_BUTTON_PRESS:
+            return handleShiftButtonPress(event, messages);
+            
+        case InputEvent::BUTTON_PRESS:
+            if (paramLockState_.active) {
+                return handleParameterControlPress(event, messages);
+            } else {
+                return handleNormalButtonPress(event, messages);
+            }
+            
+        case InputEvent::BUTTON_RELEASE:
+            return handleButtonRelease(event, messages);
+            
+        default:
+            return 0;
+        }
+    }
+    
+private:
+    uint8_t handleShiftButtonPress(const InputEvent& event, 
+                                  std::vector<ControlMessage::Message>& messages) {
+        // SHIFT+Button = Enter parameter lock for this step
+        uint8_t track, step;
+        buttonIndexToTrackStep(event.buttonId, track, step);
+        
+        // Exit any current parameter lock first
+        if (paramLockState_.active) {
+            messages.push_back(ControlMessage::Message::exitParamLock(event.timestamp));
+        }
+        
+        // Enter parameter lock for new step
+        paramLockState_.active = true;
+        paramLockState_.triggerButtonId = event.buttonId;  
+        paramLockState_.lockedTrack = track;
+        paramLockState_.lockedStep = step;
+        
+        // Mark button as parameter lock trigger
+        buttonStates_[event.buttonId].isParameterLockTrigger = true;
+        buttonStates_[event.buttonId].pressed = true;
+        
+        messages.push_back(ControlMessage::Message::enterParamLock(track, step, event.timestamp));
+        
+        debugLog("SHIFT-based parameter lock entered: track=" + std::to_string(track) + 
+                 ", step=" + std::to_string(step));
+        
+        return 1; // One message generated
+    }
+    
+    uint8_t handleParameterControlPress(const InputEvent& event,
+                                       std::vector<ControlMessage::Message>& messages) {
+        // Any button press during parameter lock = parameter adjustment
+        uint8_t paramType;
+        int8_t delta;
+        
+        if (mapButtonToParameterControl(event.buttonId, paramType, delta)) {
+            messages.push_back(ControlMessage::Message::adjustParameter(paramType, delta, event.timestamp));
+            
+            debugLog("Parameter adjustment: type=" + std::to_string(paramType) + 
+                     ", delta=" + std::to_string(delta));
+            
+            return 1;
+        }
+        
+        return 0;
+    }
+    
+    uint8_t handleNormalButtonPress(const InputEvent& event,
+                                   std::vector<ControlMessage::Message>& messages) {
+        // Normal button press - just track state for step toggle on release
+        buttonStates_[event.buttonId].pressed = true;
+        return 0; // No immediate message - wait for release
+    }
+    
+    uint8_t handleButtonRelease(const InputEvent& event,
+                               std::vector<ControlMessage::Message>& messages) {
+        
+        ButtonState& buttonState = buttonStates_[event.buttonId];
+        
+        if (buttonState.isParameterLockTrigger) {
+            // Release of parameter lock trigger button = exit parameter lock
+            paramLockState_.active = false;
+            paramLockState_.triggerButtonId = 255;
+            
+            buttonState.isParameterLockTrigger = false;
+            buttonState.pressed = false;
+            
+            messages.push_back(ControlMessage::Message::exitParamLock(event.timestamp));
+            
+            debugLog("Parameter lock exited via trigger button release");
+            
+            return 1;
+        } else if (buttonState.pressed && !paramLockState_.active) {
+            // Normal step toggle (only when not in parameter lock mode)
+            uint8_t track, step;
+            buttonIndexToTrackStep(event.buttonId, track, step);
+            
+            buttonState.pressed = false;
+            
+            messages.push_back(ControlMessage::Message::toggleStep(track, step, event.timestamp));
+            
+            debugLog("Step toggle: track=" + std::to_string(track) + ", step=" + std::to_string(step));
+            
+            return 1;
+        }
+        
+        // Release during parameter lock mode (not trigger button) = no action
+        buttonState.pressed = false;
+        return 0;
+    }
+    
+    bool mapButtonToParameterControl(uint8_t buttonId, uint8_t& paramType, int8_t& delta) const {
+        // Bank-aware parameter control mapping
+        // Determine which bank the current parameter lock trigger is in
+        bool triggerInLeftBank = isLeftBankButton(paramLockState_.triggerButtonId);
+        
+        // Control keys are in the opposite bank from the trigger
+        if (triggerInLeftBank) {
+            // Trigger in left bank → control keys in right bank
+            switch (buttonId) {
+            case 28: // 'b' = decrement MIDI note
+                paramType = 1; // MIDI_NOTE parameter
+                delta = -1;
+                return true;
+            case 20: // 'g' = increment MIDI note
+                paramType = 1; // MIDI_NOTE parameter
+                delta = +1;
+                return true;
+            case 29: // 'n' = decrement MIDI velocity
+                paramType = 2; // VELOCITY parameter
+                delta = -10;
+                return true;
+            case 21: // 'h' = increment MIDI velocity
+                paramType = 2; // VELOCITY parameter
+                delta = +10;
+                return true;
+            }
+        } else {
+            // Trigger in right bank → control keys in left bank
+            switch (buttonId) {
+            case 24: // 'z' = decrement MIDI note
+                paramType = 1; // MIDI_NOTE parameter
+                delta = -1;
+                return true;
+            case 16: // 'a' = increment MIDI note
+                paramType = 1; // MIDI_NOTE parameter
+                delta = +1;
+                return true;
+            case 25: // 'x' = decrement MIDI velocity
+                paramType = 2; // VELOCITY parameter
+                delta = -10;
+                return true;
+            case 17: // 's' = increment MIDI velocity
+                paramType = 2; // VELOCITY parameter
+                delta = +10;
+                return true;
+            }
+        }
+        
+        return false; // Button doesn't map to a parameter control
+    }
+    
+    bool isLeftBankButton(uint8_t buttonId) const {
+        // Left bank: buttons 0-3, 8-11, 16-19, 24-27 (columns 0-3)
+        uint8_t column = buttonId % 8;
+        return column < 4;
+    }
+};
+```
 
-## Testing Strategy
+### 4. Platform SHIFT Key Detection
 
-### Unit Tests Required:
+**PLATFORM-SPECIFIC**: Detect SHIFT keys across different platforms
 
-1. **CursesInputLayer hold detection** - Test press/hold/release timing
-2. **InputStateEncoder integration** - Test state transitions
-3. **InputStateProcessor parameter lock logic** - Test entry/exit conditions
-4. **ControlKeyMapper functionality** - Test bank detection and key mapping
+```cpp
+bool CursesInputLayer::isShiftKey(int key) const {
+    // ncurses SHIFT key detection
+    switch (key) {
+    case KEY_SHIFT:        // If ncurses provides this
+    case KEY_LEFT_SHIFT:   // Left shift key
+    case KEY_RIGHT_SHIFT:  // Right shift key
+        return true;
+    default:
+        // Also detect capital letters as implicit shift
+        return (key >= 'A' && key <= 'Z');
+    }
+}
 
-### Integration Tests Required:
+void CursesInputLayer::updateShiftState(int key, bool pressed) {
+    if (key >= 'A' && key <= 'Z') {
+        // Capital letter implies shift is pressed for this key
+        shiftPressed_ = pressed;
+    } else if (isShiftKey(key)) {
+        // Explicit shift key
+        shiftPressed_ = pressed;
+    }
+}
 
-1. **Complete parameter lock flow** - Hold button → adjust parameters → release
-2. **Control key validation** - Proper bank switching and key activation
-3. **Visual feedback** - Parameter lock indicators and key highlighting
+// Enhanced key processing with SHIFT detection
+void CursesInputLayer::processKeyInput(int key) {
+    bool isCapital = (key >= 'A' && key <= 'Z');
+    bool isLower = (key >= 'a' && key <= 'z');
+    bool isNumber = (key >= '0' && key <= '9');
+    
+    // Convert capital letters to lowercase for mapping, but preserve SHIFT info
+    int mappingKey = key;
+    bool hasShiftModifier = isCapital;
+    
+    if (isCapital) {
+        mappingKey = key - 'A' + 'a'; // Convert to lowercase for mapping lookup
+    }
+    
+    uint8_t row, col;
+    if (getKeyMapping(mappingKey, row, col)) {
+        uint8_t buttonId = getButtonIndex(row, col);
+        uint32_t timestamp = clock_->getCurrentTime();
+        
+        // Generate appropriate event type based on SHIFT state
+        InputEvent::Type eventType = hasShiftModifier ? InputEvent::SHIFT_BUTTON_PRESS : InputEvent::BUTTON_PRESS;
+        
+        InputEvent event(eventType, buttonId, timestamp, hasShiftModifier ? 1 : 0, 0);
+        
+        if (eventQueue_.size() < config_.performance.eventQueueSize) {
+            eventQueue_.push(event);
+            
+            debugLog("Key '" + std::string(1, key) + "' -> " + 
+                     (hasShiftModifier ? "SHIFT+" : "") + "button " + std::to_string(buttonId));
+        } else {
+            status_.eventsDropped++;
+        }
+    }
+}
+```
 
-### Manual Testing Scenarios:
+## User Experience Design
+
+### Visual Feedback During Parameter Lock
+
+**ENHANCED DISPLAY**: Clear indication of parameter lock mode and available controls
+
+```cpp
+class ParameterLockDisplay {
+public:
+    void updateParameterLockDisplay(IDisplay* display, const ParameterLockState& state) {
+        if (!state.active) return;
+        
+        // 1. Highlight the locked step in distinctive color
+        uint8_t lockedButtonId = state.triggerButtonId;
+        display->setPixel(lockedButtonId, PARAM_LOCK_ACTIVE_COLOR); // Bright white
+        
+        // 2. Highlight available control keys
+        highlightControlKeys(display);
+        
+        // 3. Dim non-control keys
+        dimInactiveKeys(display, state);
+    }
+    
+private:
+    static constexpr uint32_t PARAM_LOCK_ACTIVE_COLOR = 0xFFFFFF;  // White
+    static constexpr uint32_t CONTROL_KEY_COLOR = 0x00FF00;       // Green  
+    static constexpr uint32_t DIMMED_KEY_COLOR = 0x202020;        // Dark gray
+    
+    void highlightControlKeys(IDisplay* display, const ParameterLockState& state) {
+        // Highlight control keys based on which bank the trigger is in
+        bool triggerInLeftBank = isLeftBankButton(state.triggerButtonId);
+        
+        if (triggerInLeftBank) {
+            // Trigger in left bank → control keys in right bank
+            display->setPixel(28, CONTROL_KEY_COLOR); // 'b' = decrement note
+            display->setPixel(20, CONTROL_KEY_COLOR); // 'g' = increment note
+            display->setPixel(29, CONTROL_KEY_COLOR); // 'n' = decrement velocity
+            display->setPixel(21, CONTROL_KEY_COLOR); // 'h' = increment velocity
+        } else {
+            // Trigger in right bank → control keys in left bank
+            display->setPixel(24, CONTROL_KEY_COLOR); // 'z' = decrement note
+            display->setPixel(16, CONTROL_KEY_COLOR); // 'a' = increment note
+            display->setPixel(25, CONTROL_KEY_COLOR); // 'x' = decrement velocity
+            display->setPixel(17, CONTROL_KEY_COLOR); // 's' = increment velocity
+        }
+    }
+    
+    bool isLeftBankButton(uint8_t buttonId) const {
+        // Left bank: buttons 0-3, 8-11, 16-19, 24-27 (columns 0-3)
+        uint8_t column = buttonId % 8;
+        return column < 4;
+    }
+    
+    void dimInactiveKeys(IDisplay* display, const ParameterLockState& state) {
+        for (uint8_t i = 0; i < 32; ++i) {
+            if (i != state.triggerButtonId && !isControlKey(i)) {
+                display->setPixel(i, DIMMED_KEY_COLOR);
+            }
+        }
+    }
+};
+```
+
+### Usage Examples
+
+#### Example 1: Left Bank Parameter Lock Usage
 
 ```
-Scenario 1: Basic Parameter Lock
-1. Run simulation
-2. Hold 'q' for >500ms (should enter parameter lock, keep button held)
-3. While holding 'q', press '5' (should adjust pitch up)
-4. While holding 'q', press '6' (should adjust pitch up again)  
-5. Release 'q' (should exit parameter lock)
+1. User presses SHIFT+q (holds SHIFT, presses q)
+   → Enters parameter lock mode for Track 1, Step 0
+   → 'q' is in LEFT bank, so control keys are in RIGHT bank
+   → LED grid shows: step (1,0) highlighted white, control keys (b,g,n,h) highlighted green
 
-Scenario 2: Bank Switching
-1. Hold 'g' (right bank button) for >500ms
-2. Control keys should be left bank: z/a/x/s
-3. Press 'z' (should adjust pitch down)
-4. Press 'a' (should adjust pitch up)
-5. Release 'g' (should exit parameter lock)
+2. User presses 'g' (increment note control for right bank)  
+   → MIDI note for step (1,0) increases by 1 semitone
+   → No change in LED display (still in parameter lock mode)
+
+3. User presses 'b' (decrement note control for right bank)
+   → MIDI note for step (1,0) decreases by 1 semitone  
+   → No change in LED display
+
+4. User presses 'q' (without SHIFT)
+   → Exits parameter lock mode
+   → LED grid returns to normal sequencer display
 ```
+
+#### Example 2: Right Bank Parameter Lock Usage
+
+```
+1. SHIFT+5 → Enter parameter lock for Track 0, Step 4
+   → '5' is in RIGHT bank, so control keys are in LEFT bank
+   → LED grid shows: step (0,4) highlighted white, control keys (z,a,x,s) highlighted green
+2. a,a,a → Increase MIDI note by 3 semitones (using left bank controls)
+3. s,s → Increase velocity by 20 (using left bank controls)
+4. z → Decrease MIDI note by 1 semitone (using left bank controls)
+5. Press '5' → Exit parameter lock mode
+```
+
+#### Example 3: Bank Switching Example
+
+```
+1. SHIFT+a → Enter parameter lock for Track 2, Step 0 (LEFT bank)
+   → Control keys are in RIGHT bank (b,g,n,h)
+2. g,g → Adjust note up using right bank controls
+3. SHIFT+5 → Exit previous lock, enter parameter lock for Track 0, Step 4 (RIGHT bank)
+   → Control keys switch to LEFT bank (z,a,x,s)
+4. s,s,s → Adjust velocity up using left bank controls
+5. Press '5' → Exit parameter lock mode
+```
+
+## Implementation Benefits
+
+### 1. Eliminates All Timing Issues
+
+- **No race conditions**: SHIFT state is deterministic
+- **No timeout logic**: No artificial time-based releases
+- **ncurses compatible**: Works perfectly with key repeat behavior
+- **Platform agnostic**: Same logic works on hardware and simulation
+
+### 2. Superior User Experience
+
+- **Predictable**: SHIFT+key always enters, key alone always exits
+- **Discoverable**: Standard keyboard modifier pattern familiar to all users
+- **Fast**: No waiting for timeout thresholds
+- **Precise**: No timing variability - works the same every time
+
+### 3. Architectural Simplification
+
+- **Stateless input layer**: CursesInputLayer just detects keys and SHIFT state
+- **Clear separation**: GestureDetector handles all semantic interpretation
+- **Testable**: Easy to mock SHIFT+key combinations
+- **Maintainable**: Simple state machine with explicit transitions
+
+### 4. Future Extensibility
+
+- **Multiple modifiers**: Could add CTRL+key, ALT+key for different functions
+- **Context-sensitive**: Different control mappings per parameter lock context
+- **Scalable**: Easy to add new parameter types and control mappings
+
+## Migration Strategy
+
+### Phase 1: Core SHIFT Detection (Priority 1)
+
+1. **Enhance CursesInputLayer**: Add SHIFT key detection and event generation
+2. **Extend InputEvent**: Add SHIFT_BUTTON_PRESS/SHIFT_BUTTON_RELEASE types
+3. **Test SHIFT detection**: Ensure capital letters and explicit SHIFT keys work
+
+### Phase 2: SHIFT-Based GestureDetector (Priority 1)
+
+1. **Create ShiftBasedGestureDetector**: Complete rewrite of gesture detection logic
+2. **Remove timing logic**: Eliminate all timeout-based parameter lock code
+3. **Implement control mapping**: Map buttons to parameter adjustment functions
+
+### Phase 3: Integration & Testing (Priority 1)
+
+1. **Update InputController**: Use new gesture detector
+2. **Test complete flow**: SHIFT+key → parameter adjustment → key → exit
+3. **Visual feedback**: Implement parameter lock display enhancements
+
+### Phase 4: Documentation & Polish (Priority 2)
+
+1. **Update SIMULATION.md**: Document new SHIFT-based controls
+2. **Add usage examples**: Comprehensive usage guide
+3. **Performance testing**: Ensure no latency or responsiveness issues
 
 ## Success Criteria
 
-### Phase 1 Complete:
+### Functional Requirements
 
-- [ ] Parameter lock can be entered by holding any grid key for ≥500ms
-- [ ] Parameter lock remains active while trigger key is held
-- [ ] Parameter lock exits immediately when trigger key is released
-- [ ] Debug output clearly shows state transitions
+- [ ] SHIFT+any step key enters parameter lock mode for that specific step
+- [ ] Any step key (without SHIFT) exits parameter lock mode
+- [ ] Control keys (b,n,v,m,g,h,f,j) adjust parameters during parameter lock
+- [ ] Visual feedback clearly shows parameter lock state and available controls
+- [ ] No timing dependencies - all behavior is deterministic
+- [ ] Works reliably in ncurses simulation environment
 
-### Phase 2 Complete:
+### Performance Requirements
 
-- [ ] Control keys are correctly mapped based on trigger button bank
-- [ ] Left bank triggers use right bank control keys (5678/tyui/ghjk/bnm,)
-- [ ] Right bank triggers use left bank control keys (1234/qwer/asdf/zxcv)
-- [ ] Only control keys from opposite bank respond during parameter lock
+- [ ] Zero latency - immediate response to SHIFT+key combinations
+- [ ] No dropped events - all SHIFT+key presses properly detected
+- [ ] Smooth operation - no stuttering or delayed response
+- [ ] Memory efficient - no memory leaks or excessive allocations
 
-### Phase 3 Complete:
+### User Experience Requirements
 
-- [ ] Real-time hold detection works during continuous key press
-- [ ] Parameter lock can be entered without releasing trigger key
-- [ ] Timing updates properly maintain lock state during hold
+- [ ] Intuitive - parameter lock behavior is predictable and discoverable
+- [ ] Consistent - same behavior every time, regardless of timing
+- [ ] Forgiving - easy to exit parameter lock mode
+- [ ] Visual - clear feedback about current mode and available actions
 
-### Phase 4 Complete:
+## Risk Assessment
 
-- [ ] Visual feedback shows parameter lock mode activation
-- [ ] Control keys are highlighted during parameter lock
-- [ ] Non-control keys are visually dimmed during parameter lock
-- [ ] Clear console debug output for all state changes
+### Low Risk Items
 
-## Risk Mitigation
+- **SHIFT detection**: Standard keyboard functionality, well-supported
+- **Event generation**: Simple extension of existing InputEvent system
+- **Control mapping**: Straightforward button-to-parameter mapping
 
-### High-Risk Changes:
+### Medium Risk Items
 
-1. **CursesInputLayer hold detection** - Risk of breaking existing key input
-    - **Mitigation**: Maintain backward compatibility, add extensive unit tests
+- **Integration complexity**: Need to ensure clean integration with existing sequencer
+- **Visual feedback**: May require display layer changes for highlighting
+- **Testing scope**: Need comprehensive testing of all key combinations
 
-2. **InputStateProcessor logic changes** - Risk of breaking existing gesture detection
-    - **Mitigation**: Test all existing functionality, maintain existing test cases
+### Mitigation Strategies
 
-3. **Integration with InputStateEncoder** - Risk of ownership/lifecycle issues
-    - **Mitigation**: Follow RAII patterns, clear ownership semantics
+- **Incremental development**: Implement and test each phase independently
+- **Backward compatibility**: Maintain existing interfaces during transition
+- **Comprehensive testing**: Unit tests for all SHIFT+key combinations
+- **User testing**: Validate user experience with actual users
 
-### Testing Dependencies:
+## Technical Implementation Notes
 
-- Requires properly functioning CursesDisplay for simulation environment
-- Requires InputController integration testing
-- Requires StepSequencer parameter handling (may need separate implementation)
+### Memory Requirements
 
-## Implementation Order Priority:
+- **Minimal overhead**: Only need to track current SHIFT state (1 bool)
+- **No timing buffers**: Eliminate timeout tracking structures
+- **Efficient mapping**: Simple lookup tables for button-to-parameter mapping
 
-1. **Phase 1.1-1.3** (Critical): Fix core state architecture
-2. **Phase 2.1-2.2** (High): Add control key mapping
-3. **Phase 3.1-3.2** (Medium): Implement real-time hold detection
-4. **Phase 4.1-4.2** (Low): Enhanced user experience
+### Performance Characteristics
 
-This plan addresses all documented parameter lock behavior and ensures the simulation conforms exactly to the
-specification in `docs/SIMULATION.md`.
+- **O(1) SHIFT detection**: Simple boolean check per key event
+- **O(1) parameter mapping**: Direct lookup table access
+- **No polling overhead**: Event-driven design with no background timing
+
+### Platform Compatibility
+
+- **ncurses**: Works with standard capital letter detection
+- **Hardware**: Can be extended to use physical modifier keys
+- **Cross-platform**: Same logic works on all supported platforms
+
+## Conclusion
+
+The SHIFT-based parameter lock implementation represents a **fundamental architectural improvement** that eliminates all
+timing-related issues while providing a superior user experience. By replacing complex timing logic with simple,
+deterministic SHIFT key detection, we achieve:
+
+1. **100% reliability** - No race conditions or timing dependencies
+2. **Better UX** - Familiar, predictable modifier key behavior
+3. **Simpler code** - Clean state machine with explicit transitions
+4. **Future ready** - Extensible design for additional modifier combinations
+
+This approach transforms parameter locks from a **timing-based challenge** into a **straightforward keyboard interface**
+that works reliably across all platforms and usage scenarios.
+
+**IMPLEMENTATION PRIORITY**: This should be implemented immediately as it solves the core architectural issues
+identified in the current timing-based approach and provides a solid foundation for all future parameter lock
+functionality.

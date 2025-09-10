@@ -131,9 +131,20 @@ bool trellisReady = trellis.begin() || simulateHardware();
 
 ### Repository Hygiene
 - **Build artifacts ONLY in `build/` directory** (configured in .gitignore)
-- NO temporary scripts, logs, or generated files committed to git
+- **ABSOLUTELY NO temporary files in top-level directory** - NO build scripts, test scripts, logs, or ANY generated files
+- **Keep top-level directory PRISTINE** - only essential project files (CMakeLists.txt, Makefile, README, etc.)
+- **NO temporary scripts, logs, or generated files committed to git** - EVER
 - **Never bypass pre-commit or pre-push hooks** - fix issues instead
 - Clean repository is mandatory
+
+#### 🚨 TOP-LEVEL DIRECTORY CLEANLINESS RULES:
+- **NO** `*.sh` scripts except essential project scripts in proper locations
+- **NO** temporary test files, build files, or debugging artifacts
+- **NO** convenience scripts, quick builds, or one-off utilities
+- **NO** generated files, logs, or build outputs
+- **USE** proper directories: scripts in `scripts/`, tests in `test/`, builds in `build*/`
+- **CLEAN UP** immediately after creating temporary files for development
+- **VIOLATING** this rule creates technical debt and repository pollution
 
 ## Implementation Patterns
 
@@ -461,6 +472,7 @@ try {
 ❌ **NEVER ignore memory constraints** - SAMD51 has limited RAM  
 ❌ **NEVER skip error checking** for hardware operations  
 ❌ **NEVER use recursion** without bounded depth  
+❌ **NEVER EVER leave temporary files in the top-level directory** - CLEAN UP YOUR TURDS IMMEDIATELY  
 
 ## Success Criteria for AI Agents
 
@@ -474,6 +486,7 @@ try {
 ✅ **Memory usage fits** SAMD51 constraints  
 ✅ **Real-time constraints met**  
 ✅ **Tests maintain coverage** >80%  
+✅ **Top-level directory remains pristine** - no temporary files or build turds left behind  
 
 ## Future Expansion
 

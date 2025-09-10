@@ -6,8 +6,6 @@
 #include "InputSystemConfiguration.h"
 #include "IClock.h"
 #include "IDebugOutput.h"
-#include "InputStateEncoder.h"
-#include "InputStateProcessor.h"
 #include <ncurses.h>
 #include <queue>
 #include <map>
@@ -58,31 +56,22 @@ public:
      */
     CursesInputLayer();
     
-    /**
-     * @brief Get current authoritative input state
-     * 
-     * Returns the current InputState representing all input device states.
-     * This is the new primary interface for state-based input processing.
-     * 
-     * @return Current InputState with all button states and modifiers
-     */
-    InputState getCurrentInputState() const override;
-    
-    /**
-     * @brief Set InputStateEncoder for state management
-     * 
-     * Allows higher-level components (like InputController) to provide
-     * the encoder for state management. Following dependency injection
-     * pattern where platform layers don't create business logic.
-     * 
-     * @param encoder Pointer to InputStateEncoder for state transitions
-     */
-    void setInputStateEncoder(InputStateEncoder* encoder);
     
     /**
      * @brief Virtual destructor ensures proper cleanup
      */
     ~CursesInputLayer() override;
+    
+    /**
+     * @brief Get current input state (stateless sensor report)
+     * 
+     * Returns current detections as InputState. This is a pure sensor
+     * report - what keys are detected RIGHT NOW, with no memory of
+     * previous states. InputStateEncoder handles all state transitions.
+     * 
+     * @return InputState representing current key detections
+     */
+    InputState getCurrentInputState() const override;
     
     // IInputLayer interface implementation
     bool initialize(const InputSystemConfiguration& config, 
@@ -111,25 +100,21 @@ private:
     InputSystemConfiguration config_;
     IClock* clock_ = nullptr;
     IDebugOutput* debug_ = nullptr;
-    InputStateEncoder* encoder_ = nullptr;
     
     // State management
     bool initialized_ = false;
-    InputState currentState_;    ///< Current authoritative input state
-    InputState previousState_;   ///< Previous state for transition detection
     
     // Key mapping and event processing
     std::map<int, KeyMapping> keyMap_;
     std::queue<InputEvent> eventQueue_;
     
-    // Physical key state tracking for sustained holds
-    struct KeyState {
-        bool isPressed = false;           ///< Current physical press state
-        uint32_t pressTimestamp = 0;      ///< When key was first pressed
+    // Current key detection (stateless - only what's detected NOW)
+    struct KeyDetection {
+        uint32_t pressTimestamp = 0;      ///< When this key was first detected (for duration)
         uint8_t buttonId = 255;           ///< Associated button ID
     };
     
-    std::map<int, KeyState> keyStates_;   ///< Track physical state of each key
+    std::map<int, KeyDetection> currentDetections_;   ///< What keys are detected RIGHT NOW
     
     // Statistics for status reporting
     mutable InputLayerStatus status_;
@@ -178,13 +163,12 @@ private:
     void processKeyInput(int key);
     
     /**
-     * @brief Update all tracked key states for hold detection
+     * @brief Update current detections based on ncurses input
      * 
-     * Checks all currently pressed keys and updates their hold duration.
-     * This enables proper parameter lock detection for sustained holds
-     * without being disrupted by keyboard repeat events.
+     * Stateless operation: only updates what keys are detected right now.
+     * No memory of previous states - that's handled by InputStateEncoder.
      */
-    void updateKeyStates();
+    void updateCurrentDetections();
     
     /**
      * @brief Create button press event

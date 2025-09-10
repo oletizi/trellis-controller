@@ -107,13 +107,11 @@ public:
             throw std::runtime_error("Failed to initialize InputController");
         }
         
-        // **CRITICAL FIX**: Connect InputStateEncoder after InputController initialization
-        // This ensures the encoder connection survives the input layer initialization process
-        if (inputLayerPtr_ && inputStateEncoder_) {
-            inputLayerPtr_->setInputStateEncoder(inputStateEncoder_.get());
-            if (debugOutput_) {
-                debugOutput_->log("InputStateEncoder connected to CursesInputLayer after initialization");
-            }
+        // **ARCHITECTURAL CHANGE**: CursesInputLayer is now stateless
+        // InputStateEncoder is handled entirely by InputController
+        // No connection needed - CursesInputLayer just reports current detections
+        if (debugOutput_) {
+            debugOutput_->log("CursesInputLayer initialized as stateless sensor");
         }
         
         // Initialize sequencer with 120 BPM, 8 steps

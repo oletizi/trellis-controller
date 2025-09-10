@@ -5,9 +5,6 @@
 
 CursesInputLayer::CursesInputLayer() {
     status_.reset();
-    // Initialize states with default values
-    currentState_ = InputState{};
-    previousState_ = InputState{};
 }
 
 CursesInputLayer::~CursesInputLayer() {
@@ -36,9 +33,7 @@ bool CursesInputLayer::initialize(const InputSystemConfiguration& config,
     debug_ = deps.debugOutput;
     config_ = config;
     
-    // Note: InputStateEncoder must be provided by higher-level components
-    // since CursesInputLayer is a platform layer and doesn't create business logic
-    encoder_ = nullptr;  // Will be set by InputController or similar
+    // CursesInputLayer is a stateless sensor - no business logic
     
     // Verify ncurses is initialized
     if (stdscr == nullptr) {
@@ -58,9 +53,8 @@ bool CursesInputLayer::initialize(const InputSystemConfiguration& config,
         status_.reset();
         clearEvents();
         
-        // Initialize input states
-        currentState_ = InputState{};
-        previousState_ = InputState{};
+        // Initialize current detections
+        currentDetections_.clear();
         
         initialized_ = true;
         
@@ -84,14 +78,9 @@ void CursesInputLayer::shutdown() {
     // Clear event queue
     clearEvents();
     
-    // Clear key mappings and physical key states
+    // Clear key mappings and current detections
     keyMap_.clear();
-    keyStates_.clear();
-    
-    // Reset states
-    currentState_ = InputState{};
-    previousState_ = InputState{};
-    encoder_ = nullptr;
+    currentDetections_.clear();
     
     initialized_ = false;
     
@@ -113,8 +102,8 @@ bool CursesInputLayer::poll() {
         processKeyInput(key);
     }
     
-    // Update key states for hold detection
-    updateKeyStates();
+    // Update current detections (stateless)
+    updateCurrentDetections();
     
     // Update polling statistics
     status_.lastPollTime = pollStartTime;
@@ -166,12 +155,19 @@ InputSystemConfiguration CursesInputLayer::getConfiguration() const {
 uint8_t CursesInputLayer::getCurrentButtonStates(bool* buttonStates, uint8_t maxButtons) const {
     if (!buttonStates || maxButtons == 0) return 0;
     
-    // Now we can provide authoritative button state from currentState_
+    // Report what buttons are CURRENTLY detected (stateless)
     uint8_t totalButtons = std::min(static_cast<uint8_t>(GRID_ROWS * GRID_COLS), maxButtons);
     
-    // Extract button states from our authoritative InputState
+    // Initialize all buttons as not pressed
     for (uint8_t i = 0; i < totalButtons; ++i) {
-        buttonStates[i] = currentState_.isButtonPressed(i);
+        buttonStates[i] = false;
+    }
+    
+    // Set buttons that are currently detected
+    for (const auto& [keyCode, detection] : currentDetections_) {
+        if (detection.buttonId < totalButtons) {
+            buttonStates[detection.buttonId] = true;
+        }
     }
     
     return totalButtons;
@@ -262,74 +258,65 @@ void CursesInputLayer::processKeyInput(int key) {
     uint8_t buttonId = getButtonIndex(row, col);
     bool isUppercase = isUppercaseKey(key);
     
-    // **CRITICAL FIX**: Track physical key state to properly detect sustained holds
-    // Keyboard repeats should not generate new press/release pairs
+    // **STATELESS OPERATION**: Just update current detections
+    // No state memory - InputStateEncoder handles press/release logic
     
-    // Check current physical state of this key
-    auto& keyState = keyStates_[key];
-    
-    if (!keyState.isPressed) {
-        // **First press of this key - generate BUTTON_PRESS event**
-        keyState.isPressed = true;
-        keyState.pressTimestamp = currentTime;
-        keyState.buttonId = buttonId;
-        
-        // Generate press event
-        InputEvent pressEvent = createButtonPressEvent(buttonId, currentTime);
-        
-        // **Update authoritative state using InputStateEncoder**
-        if (encoder_) {
-            previousState_ = currentState_;
-            currentState_ = encoder_->processInputEvent(pressEvent, currentState_);
-        }
-        
-        // Queue press event
-        if (eventQueue_.size() < config_.performance.eventQueueSize) {
-            eventQueue_.push(pressEvent);
-            
-            if (debug_) {
-                debug_->log("[CursesInputLayer] INITIAL KEY PRESS '" + std::string(1, key) + 
-                           "' -> BUTTON_PRESS for button " + std::to_string(buttonId) + 
-                           " (tracking physical state)");
-            }
-        } else {
-            status_.eventsDropped++;
-            if (debug_) debug_->log("Event queue overflow - dropping press event");
-        }
-        
-        // For uppercase keys, simulate immediate release with long hold duration
-        if (isUppercase) {
-            // Immediately generate release event with parameter lock duration
-            uint32_t holdDuration = 600; // 600ms for parameter lock
-            InputEvent releaseEvent = createButtonReleaseEvent(buttonId, currentTime, holdDuration);
-            
-            // Update state
-            if (encoder_) {
-                currentState_ = encoder_->processInputEvent(releaseEvent, currentState_);
-            }
-            
-            // Queue release event
-            if (eventQueue_.size() < config_.performance.eventQueueSize) {
-                eventQueue_.push(releaseEvent);
-                
-                if (debug_) {
-                    debug_->log("[CursesInputLayer] UPPERCASE KEY " + std::string(1, key) + 
-                               " -> IMMEDIATE RELEASE with " + std::to_string(holdDuration) + "ms hold");
-                }
-            }
-            
-            // Reset key state since we immediately released
-            keyState.isPressed = false;
-            keyState.pressTimestamp = 0;
-        }
-    } else {
-        // **Key repeat - update last seen time but don't generate events**
-        // This prevents the timeout-based release detection from triggering
-        keyState.pressTimestamp = currentTime;
+    auto& detection = currentDetections_[key];
+    if (detection.pressTimestamp == 0) {
+        // First time detecting this key
+        detection.pressTimestamp = currentTime;
+        detection.buttonId = buttonId;
         
         if (debug_) {
-            debug_->log("[CursesInputLayer] KEY REPEAT '" + std::string(1, key) + 
-                       "' IGNORED - physical key already pressed (no spurious events)");
+            debug_->log("[CursesInputLayer] KEY DETECTED '" + std::string(1, key) + 
+                       "' -> button " + std::to_string(buttonId) + 
+                       (isUppercase ? " (uppercase)" : " (lowercase)"));
+        }
+    }
+    
+    // For uppercase keys, generate immediate press+release events
+    // This simulates a quick tap with parameter lock duration
+    if (isUppercase) {
+        // Generate press event
+        InputEvent pressEvent = createButtonPressEvent(buttonId, currentTime);
+        if (eventQueue_.size() < config_.performance.eventQueueSize) {
+            eventQueue_.push(pressEvent);
+        } else {
+            status_.eventsDropped++;
+        }
+        
+        // Generate immediate release with parameter lock duration
+        uint32_t holdDuration = 600; // 600ms for parameter lock
+        InputEvent releaseEvent = createButtonReleaseEvent(buttonId, currentTime, holdDuration);
+        if (eventQueue_.size() < config_.performance.eventQueueSize) {
+            eventQueue_.push(releaseEvent);
+        } else {
+            status_.eventsDropped++;
+        }
+        
+        // Remove from current detections since it's completed
+        currentDetections_.erase(key);
+        
+        if (debug_) {
+            debug_->log("[CursesInputLayer] UPPERCASE KEY " + std::string(1, key) + 
+                       " -> IMMEDIATE PRESS+RELEASE (" + std::to_string(holdDuration) + "ms hold)");
+        }
+    }
+    // For lowercase keys, generate press event on first detection
+    else {
+        // Only generate press event if this is the first detection of this key
+        if (detection.pressTimestamp == currentTime) {
+            InputEvent pressEvent = createButtonPressEvent(buttonId, currentTime);
+            if (eventQueue_.size() < config_.performance.eventQueueSize) {
+                eventQueue_.push(pressEvent);
+                
+                if (debug_) {
+                    debug_->log("[CursesInputLayer] LOWERCASE KEY " + std::string(1, key) + 
+                               " -> PRESS (sustained hold)");
+                }
+            } else {
+                status_.eventsDropped++;
+            }
         }
     }
 }
@@ -342,61 +329,47 @@ InputEvent CursesInputLayer::createButtonReleaseEvent(uint8_t buttonId, uint32_t
     return InputEvent(InputEvent::Type::BUTTON_RELEASE, buttonId, timestamp, static_cast<int32_t>(pressDuration), 0);
 }
 
-void CursesInputLayer::updateKeyStates() {
-    // Check for key releases by examining which keys are no longer being pressed
-    // This is needed because ncurses doesn't generate release events
-    // We detect releases by checking if a key hasn't repeated within a reasonable timeframe
+void CursesInputLayer::updateCurrentDetections() {
+    // **STATELESS TIMEOUT DETECTION**: Check which keys haven't been seen recently
+    // This is the ONLY state we maintain - what keys ncurses is detecting RIGHT NOW
     
     uint32_t currentTime = clock_->getCurrentTime();
-    constexpr uint32_t KEY_RELEASE_TIMEOUT_MS = 200; // If no repeat in 200ms, consider released
+    constexpr uint32_t KEY_RELEASE_TIMEOUT_MS = 200; // If no repeat in 200ms, no longer detected
     
-    // Create list of keys to release (can't modify map while iterating)
-    std::vector<int> keysToRelease;
+    // Find keys that are no longer detected
+    std::vector<int> keysNoLongerDetected;
     
-    for (auto& [keyCode, keyState] : keyStates_) {
-        if (keyState.isPressed) {
-            // Check if this key has been held long enough without repeat to consider it released
-            uint32_t holdTime = currentTime - keyState.pressTimestamp;
-            
-            // For simulation, we use a timeout-based approach to detect key releases
-            // In real hardware, we'd get explicit release events
-            if (holdTime >= KEY_RELEASE_TIMEOUT_MS) {
-                keysToRelease.push_back(keyCode);
-            }
+    for (auto& [keyCode, detection] : currentDetections_) {
+        uint32_t timeSinceLastSeen = currentTime - detection.pressTimestamp;
+        
+        // If we haven't seen this key recently, it's no longer detected
+        if (timeSinceLastSeen >= KEY_RELEASE_TIMEOUT_MS) {
+            keysNoLongerDetected.push_back(keyCode);
         }
     }
     
-    // Process key releases
-    for (int keyCode : keysToRelease) {
-        auto& keyState = keyStates_[keyCode];
-        uint32_t holdDuration = currentTime - keyState.pressTimestamp;
+    // Generate release events for keys no longer detected
+    for (int keyCode : keysNoLongerDetected) {
+        auto& detection = currentDetections_[keyCode];
+        uint32_t holdDuration = currentTime - detection.pressTimestamp;
         
-        // Generate release event
-        InputEvent releaseEvent = createButtonReleaseEvent(keyState.buttonId, currentTime, holdDuration);
+        // Generate release event (InputStateEncoder will handle the state logic)
+        InputEvent releaseEvent = createButtonReleaseEvent(detection.buttonId, currentTime, holdDuration);
         
-        // Update authoritative state
-        if (encoder_) {
-            previousState_ = currentState_;
-            currentState_ = encoder_->processInputEvent(releaseEvent, currentState_);
-        }
-        
-        // Queue release event
         if (eventQueue_.size() < config_.performance.eventQueueSize) {
             eventQueue_.push(releaseEvent);
             
             if (debug_) {
-                debug_->log("[CursesInputLayer] AUTO-RELEASE for key " + std::string(1, keyCode) + 
-                           " (button " + std::to_string(keyState.buttonId) + 
-                           ") after " + std::to_string(holdDuration) + "ms hold");
+                debug_->log("[CursesInputLayer] KEY NO LONGER DETECTED " + std::string(1, keyCode) + 
+                           " (button " + std::to_string(detection.buttonId) + 
+                           ") after " + std::to_string(holdDuration) + "ms");
             }
         } else {
             status_.eventsDropped++;
-            if (debug_) debug_->log("Event queue overflow - dropping release event");
         }
         
-        // Reset key state
-        keyState.isPressed = false;
-        keyState.pressTimestamp = 0;
+        // Remove from current detections
+        currentDetections_.erase(keyCode);
     }
 }
 
@@ -433,19 +406,19 @@ bool CursesInputLayer::validateConfiguration(const InputSystemConfiguration& con
 }
 
 InputState CursesInputLayer::getCurrentInputState() const {
-    return currentState_;
-}
-
-void CursesInputLayer::setInputStateEncoder(InputStateEncoder* encoder) {
-    encoder_ = encoder;
+    // **STATELESS SENSOR REPORT**: Return what keys are detected RIGHT NOW
+    // No memory of previous states - just current detections
     
-    if (debug_) {
-        if (encoder) {
-            debug_->log("[CursesInputLayer] InputStateEncoder set - state management enabled");
-        } else {
-            debug_->log("[CursesInputLayer] InputStateEncoder cleared - state management disabled");
+    InputState currentDetectionState{};
+    
+    // Report all currently detected keys as pressed buttons
+    for (const auto& [keyCode, detection] : currentDetections_) {
+        if (detection.buttonId < 32) { // Valid button range
+            currentDetectionState.setButtonState(detection.buttonId, true);
         }
     }
+    
+    return currentDetectionState;
 }
 
 void CursesInputLayer::updateStatistics() const {

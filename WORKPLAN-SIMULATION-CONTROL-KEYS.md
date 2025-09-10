@@ -1,5 +1,147 @@
 # Implementation Plan: Simulation Control Keys & Parameter Locks
 
+!!!IMPORTANT: CRITICAL ISSUE
+
+## Overview
+
+This document tracks the implementation of simulation control keys for the Trellis Controller, focusing on parameter lock functionality and timing requirements.
+
+## Addendum: Parameter Lock Issue Analysis (2025-09-10)
+
+### Issue Discovered
+
+During testing of parameter lock functionality in simulation, the following behavior was observed:
+
+**Test Case**: Hold 'a' key + press 'b' key to trigger parameter lock mode
+**Expected**: Parameter lock mode should activate when 'a' is held for ≥500ms, then 'b' should function as a control key
+**Actual**: Parameter lock mode never activates; both keys are treated as independent button presses
+
+### Root Cause Analysis
+
+Investigation revealed a critical timing mismatch in the `CursesInputLayer` implementation:
+
+1. **Parameter Lock Requirement**: `TrellisGestureDetector` requires a key to be held continuously for **≥500ms** to enter parameter lock mode
+2. **Simulation Auto-Release**: `CursesInputLayer` automatically releases keys after **200ms** via `KEY_RELEASE_TIMEOUT_MS`
+3. **Timing Conflict**: 200ms auto-release < 500ms parameter lock threshold = **impossible to achieve parameter locks**
+
+#### Technical Details
+
+```cpp
+// In CursesInputLayer.cpp
+const uint32_t KEY_RELEASE_TIMEOUT_MS = 200;  // ← Too short!
+
+// In TrellisGestureDetector.cpp  
+const uint32_t PARAMETER_LOCK_HOLD_TIME_MS = 500;  // ← Required threshold
+```
+
+**Sequence of Events**:
+1. User presses 'a' at T=0ms
+2. CursesInputLayer generates BUTTON_PRESS event
+3. At T=200ms, CursesInputLayer auto-generates BUTTON_RELEASE event
+4. At T=500ms, user is still physically holding 'a', but system thinks it's released
+5. Parameter lock threshold never reached
+
+### Recommended Solution
+
+**Primary Fix**: Increase `KEY_RELEASE_TIMEOUT_MS` to allow parameter lock detection:
+
+```cpp
+// In CursesInputLayer.cpp - increase timeout
+const uint32_t KEY_RELEASE_TIMEOUT_MS = 800;  // 300ms safety margin above 500ms threshold
+```
+
+**Enhanced Solution**: Make timeout configurable with intelligent defaults:
+
+```cpp
+// Configuration-based approach
+class CursesInputLayer {
+private:
+    uint32_t keyReleaseTimeoutMs;
+    
+public:
+    // Constructor with configurable timeout
+    explicit CursesInputLayer(uint32_t keyTimeout = 800) 
+        : keyReleaseTimeoutMs(keyTimeout) {}
+        
+    // Allow runtime adjustment for testing
+    void setKeyReleaseTimeout(uint32_t timeoutMs) {
+        keyReleaseTimeoutMs = timeoutMs;
+    }
+};
+```
+
+### Implementation Approach
+
+#### Phase 1: Immediate Fix (Minimal Change)
+1. **File**: `src/simulation/CursesInputLayer.cpp`
+2. **Change**: Update `KEY_RELEASE_TIMEOUT_MS` from `200` to `800`
+3. **Testing**: Verify parameter lock mode activates with hold+press sequences
+4. **Validation**: Ensure normal key press/release still works correctly
+
+#### Phase 2: Enhanced Solution (Optional)
+1. **Add configurability** to CursesInputLayer constructor
+2. **Update Dependencies struct** to pass timeout configuration
+3. **Add unit tests** for different timeout scenarios
+4. **Document** the timing relationship in code comments
+
+### Compatibility Considerations
+
+**Existing Functionality Preserved**:
+- Normal key press/release detection unaffected
+- Quick tap gestures (< 200ms) still work correctly
+- Input event pipeline remains unchanged
+- No breaking changes to public interfaces
+
+**Performance Impact**:
+- Minimal: Only affects timeout comparison logic
+- Memory: No additional allocations
+- Real-time safety: Maintains deterministic execution
+
+### Testing Strategy
+
+**Manual Testing**:
+1. Hold 'a' for 1 second, press 'b' → Should enter parameter lock mode
+2. Quick tap 'a' → Should toggle step normally
+3. Hold 'q' for 1 second, press multiple right-bank keys → Should adjust parameters
+4. Rapid key sequences → Should not cause input lag
+
+**Automated Testing**:
+```cpp
+// Test case for parameter lock timing
+TEST_CASE("CursesInputLayer parameter lock timing") {
+    CursesInputLayer input(800);  // 800ms timeout
+    
+    // Simulate holding key for parameter lock duration
+    input.simulateKeyHold('a', 600);  // > 500ms threshold
+    
+    InputEvent event;
+    REQUIRE(input.getNextEvent(event));
+    REQUIRE(event.type == InputEventType::BUTTON_PRESS);
+    
+    // Verify no auto-release before timeout
+    REQUIRE_FALSE(input.hasEvents());  // No release event yet
+}
+```
+
+### Implementation Priority
+
+**High Priority**: This issue completely blocks parameter lock functionality in simulation, which is critical for development and testing workflows.
+
+**Risk Level**: Low - change is isolated to simulation layer with clear fallback behavior
+
+**Effort**: Small - single constant change with optional enhancements
+
+### Success Criteria
+
+- [ ] Parameter lock mode activates when holding any key ≥500ms
+- [ ] Control keys function correctly during parameter lock mode
+- [ ] Normal key press/release behavior unchanged
+- [ ] No input lag or responsiveness degradation
+- [ ] Documentation updated to reflect timing requirements
+
+
+IMPORTANT: Ignore everything below this line. It's for historical reference only.
+__END__
 ## Problem Analysis
 
 After reviewing the simulation documentation (`docs/SIMULATION.md`) and current implementation, there are several

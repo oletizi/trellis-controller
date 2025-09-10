@@ -2,6 +2,154 @@
 
 !!!IMPORTANT: CRITICAL ISSUE
 
+## CRITICAL: Architecturally Correct Solution (2025-09-10)
+
+### Architectural Violation in Previous Solution
+
+**CRITICAL FLAW**: The previously proposed solution (sections below) introduces a **fundamental architectural violation** by creating multiple state containers (`currentPressedKeys_`, `previousPressedKeys_`) instead of maintaining the project's core architectural principle: **single bitwise-encoded state variable**.
+
+#### Project's Sophisticated State Architecture
+
+This project uses a **sophisticated bitwise state encoding** where ALL state information is maintained in a single 64-bit `InputState` variable:
+
+```cpp
+// Core Architecture: Single Source of Truth
+struct InputState {
+    uint64_t state;  // ALL state fits in 64 bits
+    // Bitwise encoding for: button states, timing, parameter locks, etc.
+};
+
+// Pure functional state management
+class InputStateEncoder {
+    InputState encodeInputEvent(const InputState& current, const InputEvent& event);
+    // All state transitions are pure functions
+};
+```
+
+#### Architectural Principles Violated
+
+The previous solution violates these **critical architectural principles**:
+
+1. **Single Source of Truth**: One 64-bit InputState contains everything
+2. **Pure Functional**: State transitions are pure functions without side effects
+3. **Platform Abstraction**: Input layers detect inputs, don't manage application state
+4. **Bitwise Encoding**: All state fits in the structured 64-bit value
+5. **No Distributed State**: No separate state containers across components
+
+#### Correct Architectural Solution
+
+**PRINCIPLE**: Fix INPUT DETECTION, not state management. The issue is in `CursesInputLayer`'s ability to detect physical key state, NOT in the state management architecture.
+
+##### What CursesInputLayer Should Do (CORRECT):
+
+```cpp
+class CursesInputLayer {
+private:
+    // COMPLETELY STATELESS - NO memory of previous polls
+    // NO physicalKeysDetected_, NO previousPhysicalKeys_
+    
+public:
+    bool poll() override {
+        // Step 1: Detect ONLY what ncurses currently sees (stateless)
+        std::vector<int> currentlyDetectedKeys = detectCurrentPhysicalKeys();
+        
+        // Step 2: Report current state to InputStateEncoder
+        // InputStateEncoder compares against its bitwise state to determine press/release
+        reportCurrentState(currentlyDetectedKeys);
+        
+        // Step 3: InputStateEncoder handles ALL state management and event generation
+        return hasEvents();
+    }
+};
+```
+
+##### What InputStateEncoder Does (UNCHANGED):
+
+```cpp
+class InputStateEncoder {
+    // Maintains THE ONLY state container
+    InputState encodeInputEvent(const InputState& current, const InputEvent& event) {
+        // Pure functional state transition
+        // ALL state management happens here
+        // Returns new InputState with all timing, locks, etc.
+    }
+};
+```
+
+#### Key Architectural Corrections
+
+1. **CursesInputLayer Responsibility**: ONLY detect physical key presence for event generation
+2. **InputStateEncoder Responsibility**: ALL state management in single bitwise InputState
+3. **No Duplicate State**: No `currentPressedKeys_` alongside `InputState` - that's distributed state
+4. **Pure Functions**: State transitions remain pure without side effects
+5. **Platform Independence**: Business logic stays in core, platform code only detects inputs
+
+#### Implementation Correction - Truly Stateless CursesInputLayer
+
+**The correct architecture flow**:
+1. **CursesInputLayer.poll()**: "Keys currently detected: [a, b, c]" (no memory)
+2. **InputStateEncoder.updateFromCurrentDetection()**: Compares [a,b,c] against bitwise state
+3. **InputStateEncoder**: Generates PRESS/RELEASE events and updates bitwise state
+4. **InputStateEncoder**: Maintains ALL timing, locks, gesture state in single 64-bit value
+
+**Fix in CursesInputLayer.cpp**:
+
+```cpp
+bool CursesInputLayer::poll() {
+    // STATELESS: Only detect what ncurses sees NOW, no memory of previous polls
+    std::vector<uint8_t> currentlyDetectedButtons;
+    
+    // Detect what ncurses sees right now (pure sensor reading)
+    nodelay(stdscr, TRUE);
+    int key;
+    while ((key = getch()) != ERR) {
+        uint8_t buttonId = mapKey(key);
+        if (buttonId != INVALID_BUTTON) {
+            currentlyDetectedButtons.push_back(buttonId);
+        }
+    }
+    
+    // Pass current detection to InputStateEncoder for comparison
+    // InputStateEncoder compares against its bitwise state to generate events
+    if (inputStateEncoder_) {
+        inputStateEncoder_->updateFromCurrentDetection(currentlyDetectedButtons, clock_->getCurrentTimeMs());
+    }
+    
+    // NO state storage, NO previousPhysicalKeys_, completely stateless
+    return inputStateEncoder_ && inputStateEncoder_->hasEvents();
+}
+```
+
+**Critical Distinction**:
+- `CursesInputLayer::poll()` = **Pure sensor reading** (what ncurses sees RIGHT NOW)
+- `InputStateEncoder.state` = **Stateful comparison** (detects press/release by comparing current vs previous)
+- `InputState.state` = **Application state** (what the sequencer uses)
+- CursesInputLayer has ZERO memory, InputStateEncoder has ALL the state
+
+#### Why This Maintains Architecture Integrity
+
+1. **Single State Source**: InputState remains the ONLY application state container
+2. **Pure Functions**: InputStateEncoder.encodeInputEvent() remains pure
+3. **Clear Separation**: Input detection ≠ application state management
+4. **Testability**: Easy to mock input detection without affecting state logic
+5. **Platform Independence**: Core logic unchanged, only input detection improved
+
+### Success Criteria for Architectural Correction
+
+- [ ] CursesInputLayer has ZERO memory of previous polls (completely stateless)
+- [ ] CursesInputLayer only reports "what keys are detected RIGHT NOW"
+- [ ] InputStateEncoder does ALL state comparison (current vs previous)
+- [ ] InputStateEncoder generates ALL press/release events
+- [ ] InputStateEncoder remains the ONLY state management component  
+- [ ] All state transitions remain pure functions in single 64-bit InputState
+- [ ] Platform abstraction boundaries maintained
+- [ ] Parameter locks work with proper hold detection
+- [ ] No artificial timeouts or state tracking in input layer
+
+**IMPLEMENTATION PRIORITY**: This architectural correction must be implemented BEFORE any other changes. The solution below violates core architectural principles and must be replaced.
+
+---
+
 ## Overview
 
 This document tracks the implementation of simulation control keys for the Trellis Controller, focusing on parameter

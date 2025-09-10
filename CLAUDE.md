@@ -36,6 +36,58 @@ MockInputLayer;       // Testing with programmable events
 ArduinoMidiOutput;    // Hardware USB MIDI
 ```
 
+### 64-Bit State Encoding Architecture (MANDATORY)
+**CRITICAL**: This project uses a sophisticated **single source of truth** state management system where ALL state information is encoded in a single 64-bit `InputState` variable:
+
+```cpp
+// MANDATORY ARCHITECTURE: Single 64-bit state container
+struct InputState {
+    union {
+        uint64_t raw;           // Single atomic 64-bit state
+        struct {
+            uint32_t buttonStates;  // Bits 0-31: All 32 button states
+            uint8_t modifiers;      // Bits 32-39: Parameter lock, shift flags
+            uint8_t context;        // Bits 40-47: Lock button ID, context
+            uint8_t timingInfo;     // Bits 48-55: Hold duration buckets
+            uint8_t reserved;       // Bits 56-63: Future expansion
+        };
+    };
+};
+
+// Pure functional state transitions ONLY
+class InputStateEncoder {
+    InputState processInputEvent(const InputState& current, const InputEvent& event);
+    // ALL state management goes through this single function
+};
+```
+
+#### State Management Rules (MANDATORY FOR ALL AGENTS):
+1. **Single Source of Truth**: ALL state exists ONLY in the 64-bit InputState
+2. **No Distributed State**: NEVER create separate state containers (e.g., `currentKeys_`, `previousKeys_`)
+3. **Pure Functional**: State transitions are pure functions with no side effects
+4. **Platform Abstraction**: Input layers detect events, NEVER manage state
+5. **Atomic Operations**: Entire state fits in single CPU register for race-free updates
+
+#### What Goes in InputState (49 of 64 bits used):
+- ✅ **Button States**: 32 bits (1 per NeoTrellis button)
+- ✅ **Parameter Lock**: 1 bit active flag + 5 bits for trigger button ID
+- ✅ **Timing Info**: 8 bits for hold duration (20ms resolution, 5.1s max)
+- ✅ **Modifiers**: 3 bits for shift/uppercase/etc, 5 bits available
+- ✅ **Future Use**: 15 bits available for expansion
+
+#### What NEVER Goes in Separate Variables:
+- ❌ **NO** `std::unordered_map<int, bool> keyStates`
+- ❌ **NO** `std::unordered_set<int> pressedKeys`  
+- ❌ **NO** `bool parameterLockActive` separate flag
+- ❌ **NO** timing or duration variables outside InputState
+- ❌ **NO** state comparison logic in platform layers
+
+#### Agent Implementation Rules:
+- **InputLayer**: ONLY report current detections, ZERO state memory
+- **InputStateEncoder**: ONLY place that manages/modifies InputState
+- **All Other Classes**: Receive InputState, never modify it
+- **State Transitions**: Must be pure functions: `(oldState, event) → newState`
+
 ### Input Layer Abstraction Architecture (v2.0)
 **Critical**: The input system uses sophisticated layered abstraction for complete separation of concerns:
 

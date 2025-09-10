@@ -31,6 +31,8 @@
 #include "IClock.h"
 #include "ControlMessage.h"
 #include "ConsoleDebugOutput.h"
+#include "CompositeDebugOutput.h"
+#include "FileDebugOutput.h"
 // New Input Layer Abstraction includes
 #include "InputController.h"
 #include "CursesInputLayer.h"
@@ -71,8 +73,8 @@ public:
           inputLayerPtr_(nullptr),
           running_(false) {
         
-        // Create debug output for console
-        debugOutput_ = std::make_unique<ConsoleDebugOutput>(static_cast<CursesDisplay*>(display_.get()));
+        // Create composite debug output with both console and file logging
+        setupCompositeDebugOutput();
         
         // Set up Input Layer Abstraction architecture
         setupInputController();
@@ -142,7 +144,7 @@ public:
 private:
     std::unique_ptr<SystemClock> clock_;
     std::unique_ptr<CursesDisplay> display_;
-    std::unique_ptr<ConsoleDebugOutput> debugOutput_;
+    std::unique_ptr<CompositeDebugOutput> debugOutput_;
     std::unique_ptr<InputController> inputController_;
     std::unique_ptr<InputStateEncoder> inputStateEncoder_;
     CursesInputLayer* inputLayerPtr_; ///< Non-owning pointer for encoder connection
@@ -150,6 +152,45 @@ private:
     std::unique_ptr<ShiftControls> shiftControls_;
     bool running_;
     uint32_t lastStepTime_;
+    
+    /**
+     * @brief Set up composite debug output with both console and file logging
+     * 
+     * Creates a CompositeDebugOutput that routes messages to both console (for real-time viewing)
+     * and file (for persistent logging) simultaneously. File logs are timestamped and stored
+     * in ./logs/simulation/ directory.
+     */
+    void setupCompositeDebugOutput() {
+        try {
+            // Create composite debug output
+            debugOutput_ = std::make_unique<CompositeDebugOutput>();
+            
+            // Add console debug output for real-time viewing
+            auto consoleOutput = std::make_unique<ConsoleDebugOutput>(static_cast<CursesDisplay*>(display_.get()));
+            debugOutput_->addOutput(std::move(consoleOutput));
+            
+            // Add file debug output for persistent logging
+            auto fileOutput = std::make_unique<FileDebugOutput>();
+            std::string logFilePath = fileOutput->getLogFilePath();
+            debugOutput_->addOutput(std::move(fileOutput));
+            
+            // Log initialization success
+            debugOutput_->log("Composite debug output initialized successfully");
+            debugOutput_->logf("File logging enabled: %s", logFilePath.c_str());
+            
+        } catch (const std::exception& e) {
+            // If composite setup fails, fall back to console-only debug output
+            // This ensures the application can still run even if file logging fails
+            std::cerr << "Warning: Failed to initialize file logging: " << e.what() << std::endl;
+            std::cerr << "Falling back to console-only debug output." << std::endl;
+            
+            // Create simple console debug output as fallback
+            auto consoleOutput = std::make_unique<ConsoleDebugOutput>(static_cast<CursesDisplay*>(display_.get()));
+            debugOutput_ = std::make_unique<CompositeDebugOutput>();
+            debugOutput_->addOutput(std::move(consoleOutput));
+            debugOutput_->log("Warning: File logging disabled - using console-only debug output");
+        }
+    }
     
     /**
      * @brief Set up the complete Input Layer Abstraction architecture

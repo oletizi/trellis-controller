@@ -44,6 +44,9 @@ coverage_html/
 *.backup
 *.log
 
+# Debug logs
+logs/
+
 # Test artifacts (should be in test/ subdirectories)
 /test_*
 !/test/

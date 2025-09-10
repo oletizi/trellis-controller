@@ -147,6 +147,8 @@ elseif(BUILD_SIMULATION)
         ${CMAKE_SOURCE_DIR}/src/simulation/CursesDisplay.cpp
         ${CMAKE_SOURCE_DIR}/src/simulation/CursesInputLayer.cpp
         ${CMAKE_SOURCE_DIR}/src/simulation/ConsoleDebugOutput.cpp
+        ${CMAKE_SOURCE_DIR}/src/simulation/CompositeDebugOutput.cpp
+        ${CMAKE_SOURCE_DIR}/src/simulation/FileDebugOutput.cpp
         ${CMAKE_SOURCE_DIR}/src/simulation/main.cpp
         ${CMAKE_SOURCE_DIR}/src/core/NonRealtimeSequencer.cpp
         ${CMAKE_SOURCE_DIR}/src/core/InputController.cpp

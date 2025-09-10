@@ -4,7 +4,8 @@
 
 ## Overview
 
-This document tracks the implementation of simulation control keys for the Trellis Controller, focusing on parameter lock functionality and timing requirements.
+This document tracks the implementation of simulation control keys for the Trellis Controller, focusing on parameter
+lock functionality and timing requirements.
 
 ## Addendum: Parameter Lock Issue Analysis (2025-09-10)
 
@@ -20,8 +21,10 @@ During testing of parameter lock functionality in simulation, the following beha
 
 Investigation revealed a critical timing mismatch in the `CursesInputLayer` implementation:
 
-1. **Parameter Lock Requirement**: `TrellisGestureDetector` requires a key to be held continuously for **≥500ms** to enter parameter lock mode
-2. **Simulation Auto-Release**: `CursesInputLayer` automatically releases keys after **200ms** via `KEY_RELEASE_TIMEOUT_MS`
+1. **Parameter Lock Requirement**: `TrellisGestureDetector` requires a key to be held continuously for **≥500ms** to
+   enter parameter lock mode
+2. **Simulation Auto-Release**: `CursesInputLayer` automatically releases keys after **200ms** via
+   `KEY_RELEASE_TIMEOUT_MS`
 3. **Timing Conflict**: 200ms auto-release < 500ms parameter lock threshold = **impossible to achieve parameter locks**
 
 #### Technical Details
@@ -35,97 +38,202 @@ const uint32_t PARAMETER_LOCK_HOLD_TIME_MS = 500;  // ← Required threshold
 ```
 
 **Sequence of Events**:
+
 1. User presses 'a' at T=0ms
 2. CursesInputLayer generates BUTTON_PRESS event
 3. At T=200ms, CursesInputLayer auto-generates BUTTON_RELEASE event
 4. At T=500ms, user is still physically holding 'a', but system thinks it's released
 5. Parameter lock threshold never reached
 
-### Recommended Solution
+## Critical Architectural Correction (2025-09-10)
 
-**Primary Fix**: Increase `KEY_RELEASE_TIMEOUT_MS` to allow parameter lock detection:
+### Fundamental Flaw in Timeout-Based Approach
 
-```cpp
-// In CursesInputLayer.cpp - increase timeout
-const uint32_t KEY_RELEASE_TIMEOUT_MS = 800;  // 300ms safety margin above 500ms threshold
+**CRITICAL REALIZATION**: The previously proposed "increase timeout to 800ms" solution is **fundamentally incorrect**
+and incompatible with parameter lock mode requirements. This correction addresses a critical architectural
+misunderstanding.
+
+#### Why ANY Timeout is Incompatible with Parameter Locks
+
+**Parameter Lock Requirements**:
+
+- Users must hold keys for potentially **many seconds** or **indefinitely**
+- Parameter adjustment requires continuous key holding during the entire session
+- Hardware behavior: Keys remain pressed until physically released
+- No artificial timeouts - keys stay pressed as long as user holds them
+
+**Timeout-Based Problems**:
+
+1. **200ms timeout**: Too short for ≥500ms parameter lock detection
+2. **800ms timeout**: Still incompatible - what if user holds for 10 seconds?
+3. **10 second timeout**: Still fails - user may hold indefinitely
+4. **ANY timeout**: Fundamentally wrong - creates artificial releases that don't exist in hardware
+
+#### Hardware vs Simulation Behavior Mismatch
+
+**Hardware (NeoTrellis)**:
+
+```
+Key pressed → BUTTON_PRESS event
+Key held → [no events, button remains in pressed state]
+Key released → BUTTON_RELEASE event
 ```
 
-**Enhanced Solution**: Make timeout configurable with intelligent defaults:
+**Current Simulation (INCORRECT)**:
+
+```
+Key pressed → BUTTON_PRESS event
+[Timeout expires] → BUTTON_RELEASE event (ARTIFICIAL!)
+Key still held → [system thinks released, but user still holding]
+```
+
+**Required Simulation (CORRECT)**:
+
+```
+Key pressed → BUTTON_PRESS event  
+Key held → [no events, button remains in pressed state]
+Key released → BUTTON_RELEASE event (only when actually released)
+```
+
+### Correct Solution: Explicit Key State Tracking
+
+**Core Principle**: Track which keys are **actually detected** by ncurses in each poll cycle, compare with previous poll
+to detect **real state changes**.
+
+#### Implementation Approach
 
 ```cpp
-// Configuration-based approach
 class CursesInputLayer {
 private:
-    uint32_t keyReleaseTimeoutMs;
+    std::unordered_set<int> currentPressedKeys_;   // Keys detected this poll
+    std::unordered_set<int> previousPressedKeys_;  // Keys detected last poll
+    std::unordered_map<int, uint32_t> pressStartTimes_; // When each key was first pressed
     
 public:
-    // Constructor with configurable timeout
-    explicit CursesInputLayer(uint32_t keyTimeout = 800) 
-        : keyReleaseTimeoutMs(keyTimeout) {}
+    bool poll() override {
+        // Step 1: Detect which keys are currently being pressed
+        std::unordered_set<int> detectedKeys;
         
-    // Allow runtime adjustment for testing
-    void setKeyReleaseTimeout(uint32_t timeoutMs) {
-        keyReleaseTimeoutMs = timeoutMs;
+        // Non-blocking key detection - check all possible keys
+        nodelay(stdscr, TRUE);  // Non-blocking mode
+        int key;
+        while ((key = getch()) != ERR) {
+            detectedKeys.insert(key);
+        }
+        
+        // Step 2: Compare with previous poll to detect state changes
+        uint32_t currentTime = clock_->getCurrentTimeMs();
+        
+        // Generate PRESS events for newly detected keys
+        for (int key : detectedKeys) {
+            if (previousPressedKeys_.find(key) == previousPressedKeys_.end()) {
+                // Key newly pressed
+                InputEvent event;
+                event.type = InputEventType::BUTTON_PRESS;
+                event.buttonId = mapKeyToButtonId(key);
+                event.timestamp = currentTime;
+                eventQueue_.push_back(event);
+                
+                pressStartTimes_[key] = currentTime;
+            }
+        }
+        
+        // Generate RELEASE events for keys no longer detected
+        for (int key : previousPressedKeys_) {
+            if (detectedKeys.find(key) == detectedKeys.end()) {
+                // Key released
+                InputEvent event;
+                event.type = InputEventType::BUTTON_RELEASE;
+                event.buttonId = mapKeyToButtonId(key);
+                event.timestamp = currentTime;
+                eventQueue_.push_back(event);
+                
+                pressStartTimes_.erase(key);
+            }
+        }
+        
+        // Step 3: Update state for next poll
+        previousPressedKeys_ = detectedKeys;
+        currentPressedKeys_ = detectedKeys;
+        
+        return !eventQueue_.empty();
     }
 };
 ```
 
-### Implementation Approach
+#### Key Implementation Changes Required
 
-#### Phase 1: Immediate Fix (Minimal Change)
-1. **File**: `src/simulation/CursesInputLayer.cpp`
-2. **Change**: Update `KEY_RELEASE_TIMEOUT_MS` from `200` to `800`
-3. **Testing**: Verify parameter lock mode activates with hold+press sequences
-4. **Validation**: Ensure normal key press/release still works correctly
+**1. Remove ALL Timeout Logic**:
 
-#### Phase 2: Enhanced Solution (Optional)
-1. **Add configurability** to CursesInputLayer constructor
-2. **Update Dependencies struct** to pass timeout configuration
-3. **Add unit tests** for different timeout scenarios
-4. **Document** the timing relationship in code comments
-
-### Compatibility Considerations
-
-**Existing Functionality Preserved**:
-- Normal key press/release detection unaffected
-- Quick tap gestures (< 200ms) still work correctly
-- Input event pipeline remains unchanged
-- No breaking changes to public interfaces
-
-**Performance Impact**:
-- Minimal: Only affects timeout comparison logic
-- Memory: No additional allocations
-- Real-time safety: Maintains deterministic execution
-
-### Testing Strategy
-
-**Manual Testing**:
-1. Hold 'a' for 1 second, press 'b' → Should enter parameter lock mode
-2. Quick tap 'a' → Should toggle step normally
-3. Hold 'q' for 1 second, press multiple right-bank keys → Should adjust parameters
-4. Rapid key sequences → Should not cause input lag
-
-**Automated Testing**:
 ```cpp
-// Test case for parameter lock timing
-TEST_CASE("CursesInputLayer parameter lock timing") {
-    CursesInputLayer input(800);  // 800ms timeout
+// REMOVE these completely:
+const uint32_t KEY_RELEASE_TIMEOUT_MS = 800;  // ← DELETE
+std::unordered_map<int, uint32_t> keyPressStartTimes_; // ← REPURPOSE for gesture detection only
+```
+
+**2. Implement True State Detection**:
+
+```cpp
+// ADD proper state tracking:
+std::unordered_set<int> currentPressedKeys_;   // What ncurses sees NOW
+std::unordered_set<int> previousPressedKeys_;  // What ncurses saw LAST poll
+```
+
+**3. Fix Poll Logic**:
+
+```cpp
+bool poll() {
+    // Check what keys ncurses currently detects
+    detectCurrentlyPressedKeys();
     
-    // Simulate holding key for parameter lock duration
-    input.simulateKeyHold('a', 600);  // > 500ms threshold
+    // Generate events only for actual state changes
+    generatePressEvents();   // For newly detected keys
+    generateReleaseEvents(); // For no-longer-detected keys
     
-    InputEvent event;
-    REQUIRE(input.getNextEvent(event));
-    REQUIRE(event.type == InputEventType::BUTTON_PRESS);
-    
-    // Verify no auto-release before timeout
-    REQUIRE_FALSE(input.hasEvents());  // No release event yet
+    // NO artificial timeouts - only real state changes
+    return hasEvents();
 }
 ```
 
+### Why This Mirrors Hardware Exactly
+
+**Hardware Behavior**: Button matrix scan detects which buttons are currently pressed, generates events only on state
+changes.
+
+**Corrected Simulation**: ncurses key detection finds which keys are currently pressed, generates events only on state
+changes.
+
+**Perfect Match**: Both systems track **actual current state** and generate events only on **real transitions**.
+
 ### Implementation Priority
 
-**High Priority**: This issue completely blocks parameter lock functionality in simulation, which is critical for development and testing workflows.
+**CRITICAL**: This completely replaces the flawed timeout approach. The timeout-based solution must be **completely
+removed** and replaced with proper state tracking.
+
+**Files to Modify**:
+
+- `src/simulation/CursesInputLayer.cpp` - Remove timeout logic, add state tracking
+- `src/simulation/CursesInputLayer.h` - Update member variables and interface
+- Remove any references to `KEY_RELEASE_TIMEOUT_MS`
+
+### Success Criteria (Corrected)
+
+- [ ] Keys can be held indefinitely without artificial releases
+- [ ] Parameter lock mode works with any hold duration (500ms to minutes)
+- [ ] Only actual key releases generate BUTTON_RELEASE events
+- [ ] Simulation behavior matches hardware exactly
+- [ ] No timeout-based logic anywhere in input system
+
+### Previous Analysis Remains Valid (Below Timeout Fix)
+
+The analysis below correctly identifies implementation gaps, but the **timeout-based solution was fundamentally wrong**.
+The state tracking approach above addresses the core issue while the detailed implementation plan below remains valuable
+for the complete feature set.
+
+### Implementation Priority
+
+**High Priority**: This issue completely blocks parameter lock functionality in simulation, which is critical for
+development and testing workflows.
 
 **Risk Level**: Low - change is isolated to simulation layer with clear fallback behavior
 
@@ -139,9 +247,9 @@ TEST_CASE("CursesInputLayer parameter lock timing") {
 - [ ] No input lag or responsiveness degradation
 - [ ] Documentation updated to reflect timing requirements
 
-
 IMPORTANT: Ignore everything below this line. It's for historical reference only.
 __END__
+
 ## Problem Analysis
 
 After reviewing the simulation documentation (`docs/SIMULATION.md`) and current implementation, there are several
@@ -191,7 +299,8 @@ However, there are **fundamental gaps** in the current implementation:
 
 #### 1.1 Fix CursesInputLayer Physical Key State Tracking
 
-**Issue**: CursesInputLayer treats every key input as instantaneous, but documentation requires proper press/hold/release detection
+**Issue**: CursesInputLayer treats every key input as instantaneous, but documentation requires proper
+press/hold/release detection
 
 **Files to modify**:
 
@@ -322,7 +431,9 @@ However, there are **fundamental gaps** in the current implementation:
 
 **Target File**: `/Users/orion/work/trellis-controller/src/simulation/CursesInputLayer.cpp`
 
-**Core Issue**: Currently, the CursesInputLayer treats every key as an instantaneous event based on ncurses getch(), but the documentation requires proper physical key press/hold/release detection. This needs to be replaced with proper key state tracking that can distinguish between initial press, continuous hold, and release events.
+**Core Issue**: Currently, the CursesInputLayer treats every key as an instantaneous event based on ncurses getch(), but
+the documentation requires proper physical key press/hold/release detection. This needs to be replaced with proper key
+state tracking that can distinguish between initial press, continuous hold, and release events.
 
 **Required Changes**:
 
@@ -343,7 +454,8 @@ private:
 
 **Target File**: `/Users/orion/work/trellis-controller/src/simulation/main.cpp`
 
-**Core Issue**: The InputStateEncoder exists but isn't properly integrated into the CursesInputLayer to provide proper state management.
+**Core Issue**: The InputStateEncoder exists but isn't properly integrated into the CursesInputLayer to provide proper
+state management.
 
 **Required Changes**:
 

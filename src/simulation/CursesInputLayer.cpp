@@ -202,26 +202,36 @@ uint8_t CursesInputLayer::clearEvents() {
 void CursesInputLayer::initializeKeyMapping() {
     keyMap_.clear();
     
-    // Row 0: Numbers 1-8 (Track 0)
+    // Left Bank Keys (columns 0-3): <1234QWERASDFZXCV>
+    // Row 0: Numbers 1-4 (left bank)
     keyMap_['1'] = {0, 0}; keyMap_['2'] = {0, 1}; keyMap_['3'] = {0, 2}; keyMap_['4'] = {0, 3};
+    
+    // Row 1: QWER (left bank, both upper and lowercase)
+    keyMap_['q'] = {1, 0}; keyMap_['w'] = {1, 1}; keyMap_['e'] = {1, 2}; keyMap_['r'] = {1, 3};
+    keyMap_['Q'] = {1, 0}; keyMap_['W'] = {1, 1}; keyMap_['E'] = {1, 2}; keyMap_['R'] = {1, 3};
+    
+    // Row 2: ASDF (left bank, both upper and lowercase)
+    keyMap_['a'] = {2, 0}; keyMap_['s'] = {2, 1}; keyMap_['d'] = {2, 2}; keyMap_['f'] = {2, 3};
+    keyMap_['A'] = {2, 0}; keyMap_['S'] = {2, 1}; keyMap_['D'] = {2, 2}; keyMap_['F'] = {2, 3};
+    
+    // Row 3: ZXCV (left bank, both upper and lowercase)
+    keyMap_['z'] = {3, 0}; keyMap_['x'] = {3, 1}; keyMap_['c'] = {3, 2}; keyMap_['v'] = {3, 3};
+    keyMap_['Z'] = {3, 0}; keyMap_['X'] = {3, 1}; keyMap_['C'] = {3, 2}; keyMap_['V'] = {3, 3};
+    
+    // Right Bank Keys (columns 4-7): <5678TYUIGHJKBNM,>
+    // Row 0: Numbers 5-8 (right bank)
     keyMap_['5'] = {0, 4}; keyMap_['6'] = {0, 5}; keyMap_['7'] = {0, 6}; keyMap_['8'] = {0, 7};
     
-    // Row 1: QWERTY row - both upper and lowercase (Track 1)
-    keyMap_['q'] = {1, 0}; keyMap_['w'] = {1, 1}; keyMap_['e'] = {1, 2}; keyMap_['r'] = {1, 3};
+    // Row 1: TYUI (right bank, both upper and lowercase)
     keyMap_['t'] = {1, 4}; keyMap_['y'] = {1, 5}; keyMap_['u'] = {1, 6}; keyMap_['i'] = {1, 7};
-    keyMap_['Q'] = {1, 0}; keyMap_['W'] = {1, 1}; keyMap_['E'] = {1, 2}; keyMap_['R'] = {1, 3};
     keyMap_['T'] = {1, 4}; keyMap_['Y'] = {1, 5}; keyMap_['U'] = {1, 6}; keyMap_['I'] = {1, 7};
     
-    // Row 2: ASDF row - both upper and lowercase (Track 2)  
-    keyMap_['a'] = {2, 0}; keyMap_['s'] = {2, 1}; keyMap_['d'] = {2, 2}; keyMap_['f'] = {2, 3};
+    // Row 2: GHJK (right bank, both upper and lowercase)
     keyMap_['g'] = {2, 4}; keyMap_['h'] = {2, 5}; keyMap_['j'] = {2, 6}; keyMap_['k'] = {2, 7};
-    keyMap_['A'] = {2, 0}; keyMap_['S'] = {2, 1}; keyMap_['D'] = {2, 2}; keyMap_['F'] = {2, 3};
     keyMap_['G'] = {2, 4}; keyMap_['H'] = {2, 5}; keyMap_['J'] = {2, 6}; keyMap_['K'] = {2, 7};
     
-    // Row 3: ZXCV row - both upper and lowercase (Track 3)
-    keyMap_['z'] = {3, 0}; keyMap_['x'] = {3, 1}; keyMap_['c'] = {3, 2}; keyMap_['v'] = {3, 3};
+    // Row 3: BNM, (right bank, both upper and lowercase)
     keyMap_['b'] = {3, 4}; keyMap_['n'] = {3, 5}; keyMap_['m'] = {3, 6}; keyMap_[','] = {3, 7};
-    keyMap_['Z'] = {3, 0}; keyMap_['X'] = {3, 1}; keyMap_['C'] = {3, 2}; keyMap_['V'] = {3, 3};
     keyMap_['B'] = {3, 4}; keyMap_['N'] = {3, 5}; keyMap_['M'] = {3, 6}; keyMap_['<'] = {3, 7};
 }
 
@@ -237,6 +247,32 @@ bool CursesInputLayer::getKeyMapping(int key, uint8_t& row, uint8_t& col) const 
 
 bool CursesInputLayer::isUppercaseKey(int key) const {
     return (key >= 'A' && key <= 'Z') || key == '<'; // '<' is shift+comma
+}
+
+uint8_t CursesInputLayer::getBankForKey(int key) const {
+    // Left bank (columns 0-3): 1234QWERASLVDFZXCVj
+    if (key == '1' || key == '2' || key == '3' || key == '4' ||
+        key == 'q' || key == 'w' || key == 'e' || key == 'r' ||
+        key == 'Q' || key == 'W' || key == 'E' || key == 'R' ||
+        key == 'a' || key == 's' || key == 'd' || key == 'f' ||
+        key == 'A' || key == 'S' || key == 'D' || key == 'F' ||
+        key == 'z' || key == 'x' || key == 'c' || key == 'v' ||
+        key == 'Z' || key == 'X' || key == 'C' || key == 'V') {
+        return 0; // Left bank
+    }
+    
+    // Right bank (columns 4-7): 5678TYUIGHJKBNM,
+    if (key == '5' || key == '6' || key == '7' || key == '8' ||
+        key == 't' || key == 'y' || key == 'u' || key == 'i' ||
+        key == 'T' || key == 'Y' || key == 'U' || key == 'I' ||
+        key == 'g' || key == 'h' || key == 'j' || key == 'k' ||
+        key == 'G' || key == 'H' || key == 'J' || key == 'K' ||
+        key == 'b' || key == 'n' || key == 'm' || key == ',' ||
+        key == 'B' || key == 'N' || key == 'M' || key == '<') {
+        return 1; // Right bank
+    }
+    
+    return 0; // Default to left bank for unmapped keys
 }
 
 void CursesInputLayer::processKeyInput(int key) {
@@ -274,20 +310,22 @@ void CursesInputLayer::processKeyInput(int key) {
         }
     }
     
-    // For uppercase keys, generate immediate press+release events
-    // This simulates a quick tap with parameter lock duration
+    // For uppercase keys, generate SHIFT + button press/release events
+    // This enables parameter lock mode via SHIFT detection
     if (isUppercase) {
-        // Generate press event
-        InputEvent pressEvent = createButtonPressEvent(buttonId, currentTime);
+        uint8_t bankId = getBankForKey(key);
+        
+        // Generate SHIFT button press event
+        InputEvent pressEvent = InputEvent::shiftButtonPress(buttonId, currentTime, bankId);
         if (eventQueue_.size() < config_.performance.eventQueueSize) {
             eventQueue_.push(pressEvent);
         } else {
             status_.eventsDropped++;
         }
         
-        // Generate immediate release with parameter lock duration
+        // Generate immediate SHIFT button release with parameter lock duration
         uint32_t holdDuration = 600; // 600ms for parameter lock
-        InputEvent releaseEvent = createButtonReleaseEvent(buttonId, currentTime, holdDuration);
+        InputEvent releaseEvent = InputEvent::shiftButtonRelease(buttonId, currentTime, holdDuration, bankId);
         if (eventQueue_.size() < config_.performance.eventQueueSize) {
             eventQueue_.push(releaseEvent);
         } else {
@@ -298,21 +336,24 @@ void CursesInputLayer::processKeyInput(int key) {
         currentDetections_.erase(key);
         
         if (debug_) {
-            debug_->log("[CursesInputLayer] UPPERCASE KEY " + std::string(1, key) + 
-                       " -> IMMEDIATE PRESS+RELEASE (" + std::to_string(holdDuration) + "ms hold)");
+            debug_->log("[CursesInputLayer] SHIFT+KEY " + std::string(1, key) + 
+                       " -> SHIFT_BUTTON_PRESS+RELEASE (bank=" + std::to_string(bankId) + 
+                       ", duration=" + std::to_string(holdDuration) + "ms)");
         }
     }
-    // For lowercase keys, generate press event on first detection
+    // For lowercase keys, generate regular button press event on first detection
     else {
         // Only generate press event if this is the first detection of this key
         if (detection.pressTimestamp == currentTime) {
-            InputEvent pressEvent = createButtonPressEvent(buttonId, currentTime);
+            InputEvent pressEvent = InputEvent::buttonPress(buttonId, currentTime);
             if (eventQueue_.size() < config_.performance.eventQueueSize) {
                 eventQueue_.push(pressEvent);
                 
                 if (debug_) {
+                    uint8_t bankId = getBankForKey(key);
                     debug_->log("[CursesInputLayer] LOWERCASE KEY " + std::string(1, key) + 
-                               " -> PRESS (sustained hold)");
+                               " -> BUTTON_PRESS (bank=" + std::to_string(bankId) + 
+                               ", sustained hold)");
                 }
             } else {
                 status_.eventsDropped++;
@@ -322,11 +363,11 @@ void CursesInputLayer::processKeyInput(int key) {
 }
 
 InputEvent CursesInputLayer::createButtonPressEvent(uint8_t buttonId, uint32_t timestamp) const {
-    return InputEvent(InputEvent::Type::BUTTON_PRESS, buttonId, timestamp, 1, 0);
+    return InputEvent::buttonPress(buttonId, timestamp);
 }
 
 InputEvent CursesInputLayer::createButtonReleaseEvent(uint8_t buttonId, uint32_t timestamp, uint32_t pressDuration) const {
-    return InputEvent(InputEvent::Type::BUTTON_RELEASE, buttonId, timestamp, static_cast<int32_t>(pressDuration), 0);
+    return InputEvent::buttonRelease(buttonId, timestamp, pressDuration);
 }
 
 void CursesInputLayer::updateCurrentDetections() {
@@ -353,8 +394,8 @@ void CursesInputLayer::updateCurrentDetections() {
         auto& detection = currentDetections_[keyCode];
         uint32_t holdDuration = currentTime - detection.pressTimestamp;
         
-        // Generate release event (InputStateEncoder will handle the state logic)
-        InputEvent releaseEvent = createButtonReleaseEvent(detection.buttonId, currentTime, holdDuration);
+        // Generate regular button release event (InputStateEncoder will handle the state logic)
+        InputEvent releaseEvent = InputEvent::buttonRelease(detection.buttonId, currentTime, holdDuration);
         
         if (eventQueue_.size() < config_.performance.eventQueueSize) {
             eventQueue_.push(releaseEvent);

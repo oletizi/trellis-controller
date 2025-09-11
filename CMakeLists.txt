@@ -29,6 +29,7 @@ set(CORE_SOURCES
     ${CMAKE_SOURCE_DIR}/src/core/JsonUtils.cpp
     ${CMAKE_SOURCE_DIR}/src/core/InputStateProcessor.cpp
     ${CMAKE_SOURCE_DIR}/src/core/InputStateEncoder.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/ShiftBasedGestureDetector.cpp
 )
 
 if(BUILD_TESTS)

@@ -476,7 +476,7 @@ TEST_CASE("CursesInputLayer state management", "[CursesInputLayer][simulation]")
     );
     
     CursesInputLayer cursesLayer;
-    cursesLayer.setInputStateEncoder(encoder.get());
+    // Note: InputStateEncoder is now managed by InputController, not set directly on input layer
     
     auto config = InputSystemConfiguration::forSimulation();
     InputLayerDependencies deps{clock.get(), debug.get()};

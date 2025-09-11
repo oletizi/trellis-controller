@@ -19,21 +19,28 @@
  * ncurses for cross-platform terminal input handling. Maps keyboard keys
  * to button positions and translates key events to standardized InputEvents.
  * 
- * Key Mapping:
- * Row 0: 1 2 3 4 5 6 7 8  (numbers)
- * Row 1: q w e r t y u i  (QWERTY row, both upper/lower case)  
- * Row 2: a s d f g h j k  (home row, both upper/lower case)
- * Row 3: z x c v b n m ,  (bottom row, both upper/lower case)
+ * Key Mapping (Bank-Aware):
+ * Left Bank (cols 0-3):  <1234QWERASDFZXCV>
+ * Right Bank (cols 4-7): <5678TYUIGHJKBNM,>
+ * 
+ * Row 0: 1234 | 5678  (numbers)
+ * Row 1: qwer | tyui  (QWERTY row, both upper/lower case)  
+ * Row 2: asdf | ghjk  (home row, both upper/lower case)
+ * Row 3: zxcv | bnm,  (bottom row, both upper/lower case)
  * 
  * Input Behavior:
- * - All keys: Generate raw keyboard events with key code and case information
- * - Platform layer only translates keys - no semantic interpretation
- * - InputStateAdapter handles press/release semantics based on case
+ * - Lowercase keys: Generate BUTTON_PRESS/BUTTON_RELEASE events (normal mode)
+ * - Uppercase keys: Generate SHIFT_BUTTON_PRESS/SHIFT_BUTTON_RELEASE events (parameter lock)
+ * - Bank information encoded in SHIFT events for left/right bank distinction
  * - ESC: System quit event
  * 
- * Note: This platform layer only handles key-to-event translation.
- * All gesture recognition, timing, and state management is handled
- * by higher-level components (InputController, GestureDetector).
+ * Phase 1 SHIFT Detection:
+ * - Uppercase keys detected via capital letters (A-Z) and '<' (shift+comma)
+ * - SHIFT events include bank information in context field
+ * - Foundation for parameter lock system implementation
+ * 
+ * Note: This platform layer handles key-to-event translation and SHIFT detection.
+ * Higher-level components (InputController, GestureDetector) handle gesture recognition.
  * 
  * For complete input documentation and examples, see docs/SIMULATION.md
  * 
@@ -141,9 +148,8 @@ private:
     /**
      * @brief Check if key represents uppercase letter
      * 
-     * Used to pass case information in raw keyboard events.
-     * Higher layers (InputStateAdapter) will use this to determine
-     * press/release semantics (uppercase = press, lowercase = release).
+     * Used to determine SHIFT state for parameter lock mode.
+     * Uppercase keys generate SHIFT_BUTTON_PRESS/SHIFT_BUTTON_RELEASE events.
      * 
      * @param key NCurses key code
      * @return true if key is uppercase letter
@@ -151,12 +157,25 @@ private:
     bool isUppercaseKey(int key) const;
     
     /**
+     * @brief Get bank ID for a key
+     * 
+     * Determines which bank a key belongs to for parameter lock system.
+     * Left bank: columns 0-3 (<1234QWERASDFZXCV>)
+     * Right bank: columns 4-7 (<5678TYUIGHJKBNM,>)
+     * 
+     * @param key NCurses key code
+     * @return Bank ID (0 = left bank, 1 = right bank)
+     */
+    uint8_t getBankForKey(int key) const;
+    
+    /**
      * @brief Process single keyboard key input
      * 
-     * Now properly tracks physical key state to detect sustained holds.
-     * Handles key repeats from terminal without generating spurious events.
-     * Only generates BUTTON_PRESS on initial press and BUTTON_RELEASE on
-     * actual key release with proper hold duration calculation.
+     * Implements Phase 1 SHIFT detection:
+     * - Uppercase keys generate SHIFT_BUTTON_PRESS/SHIFT_BUTTON_RELEASE events
+     * - Lowercase keys generate regular BUTTON_PRESS/BUTTON_RELEASE events
+     * - Bank information included in SHIFT events for parameter lock system
+     * - Proper hold duration calculation for both event types
      * 
      * @param key NCurses key code
      */
@@ -167,6 +186,7 @@ private:
      * 
      * Stateless operation: only updates what keys are detected right now.
      * No memory of previous states - that's handled by InputStateEncoder.
+     * Generates appropriate SHIFT or regular button events based on key case.
      */
     void updateCurrentDetections();
     
@@ -190,11 +210,11 @@ private:
     InputEvent createButtonReleaseEvent(uint8_t buttonId, uint32_t timestamp, uint32_t pressDuration) const;
     
     /**
-     * @brief Create raw keyboard event (platform-agnostic)
+     * @brief Create raw keyboard event (DEPRECATED)
      * 
-     * Creates a raw keyboard event that passes key information without
-     * semantic interpretation. Higher layers (InputStateAdapter) will
-     * determine the actual button press/release semantics.
+     * Deprecated: Phase 1 implementation now generates proper SHIFT events.
+     * Uppercase keys generate SHIFT_BUTTON_PRESS/SHIFT_BUTTON_RELEASE.
+     * Lowercase keys generate regular BUTTON_PRESS/BUTTON_RELEASE.
      * 
      * @param buttonId Linear button index (row * cols + col)
      * @param timestamp When the key was pressed

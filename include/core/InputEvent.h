@@ -56,12 +56,28 @@ struct InputEvent {
         BUTTON_RELEASE = 1,
         
         /**
+         * @brief SHIFT + button press event (parameter lock mode)
+         * - deviceId: Button index/ID
+         * - value: 1 for press, 0 for release
+         * - context: Bank information (0 = left bank, 1 = right bank)
+         */
+        SHIFT_BUTTON_PRESS = 2,
+        
+        /**
+         * @brief SHIFT + button release event
+         * - deviceId: Button index/ID
+         * - value: Duration of press in milliseconds
+         * - context: Bank information (0 = left bank, 1 = right bank)
+         */
+        SHIFT_BUTTON_RELEASE = 3,
+        
+        /**
          * @brief Rotary encoder movement
          * - deviceId: Encoder index/ID
          * - value: Signed rotation delta (positive = clockwise)
          * - context: Encoder button state (if applicable)
          */
-        ENCODER_TURN = 2,
+        ENCODER_TURN = 4,
         
         /**
          * @brief MIDI input message received
@@ -69,7 +85,7 @@ struct InputEvent {
          * - value: MIDI data byte 1 (note/CC number)
          * - context: MIDI data byte 2 (velocity/value)
          */
-        MIDI_INPUT = 3,
+        MIDI_INPUT = 5,
         
         /**
          * @brief System-level events (power, USB, etc.)
@@ -77,7 +93,7 @@ struct InputEvent {
          * - value: Event-specific data
          * - context: Additional event data
          */
-        SYSTEM_EVENT = 4
+        SYSTEM_EVENT = 6
     };
     
     Type type;              ///< Event type classification
@@ -125,19 +141,50 @@ struct InputEvent {
     /**
      * @brief Check if event represents a button press
      * 
-     * @return true if this is a button press event
+     * @return true if this is a button press event (with or without SHIFT)
      */
     bool isButtonPress() const {
-        return type == Type::BUTTON_PRESS && value != 0;
+        return (type == Type::BUTTON_PRESS || type == Type::SHIFT_BUTTON_PRESS) && value != 0;
     }
     
     /**
      * @brief Check if event represents a button release
      * 
-     * @return true if this is a button release event
+     * @return true if this is a button release event (with or without SHIFT)
      */
     bool isButtonRelease() const {
-        return type == Type::BUTTON_RELEASE || (type == Type::BUTTON_PRESS && value == 0);
+        return type == Type::BUTTON_RELEASE || type == Type::SHIFT_BUTTON_RELEASE || 
+               ((type == Type::BUTTON_PRESS || type == Type::SHIFT_BUTTON_PRESS) && value == 0);
+    }
+    
+    /**
+     * @brief Check if event represents a SHIFT button press
+     * 
+     * @return true if this is a SHIFT button press event
+     */
+    bool isShiftButtonPress() const {
+        return type == Type::SHIFT_BUTTON_PRESS && value != 0;
+    }
+    
+    /**
+     * @brief Check if event represents a SHIFT button release
+     * 
+     * @return true if this is a SHIFT button release event
+     */
+    bool isShiftButtonRelease() const {
+        return type == Type::SHIFT_BUTTON_RELEASE || (type == Type::SHIFT_BUTTON_PRESS && value == 0);
+    }
+    
+    /**
+     * @brief Get bank information for SHIFT events
+     * 
+     * @return Bank ID (0 = left bank, 1 = right bank) or 0 for non-SHIFT events
+     */
+    uint8_t getBankId() const {
+        if (type == Type::SHIFT_BUTTON_PRESS || type == Type::SHIFT_BUTTON_RELEASE) {
+            return static_cast<uint8_t>(context & 0xFF);
+        }
+        return 0;
     }
     
     /**
@@ -185,6 +232,31 @@ struct InputEvent {
      */
     static InputEvent buttonRelease(uint8_t buttonId, uint32_t timestamp, uint32_t pressDuration = 0) {
         return InputEvent(Type::BUTTON_RELEASE, buttonId, timestamp, static_cast<int32_t>(pressDuration), 0);
+    }
+    
+    /**
+     * @brief Create SHIFT + button press event
+     * 
+     * @param buttonId Button index/ID
+     * @param timestamp When the press occurred
+     * @param bankId Bank information (0 = left bank, 1 = right bank)
+     * @return InputEvent configured for SHIFT button press
+     */
+    static InputEvent shiftButtonPress(uint8_t buttonId, uint32_t timestamp, uint8_t bankId = 0) {
+        return InputEvent(Type::SHIFT_BUTTON_PRESS, buttonId, timestamp, 1, static_cast<uint32_t>(bankId));
+    }
+    
+    /**
+     * @brief Create SHIFT + button release event
+     * 
+     * @param buttonId Button index/ID
+     * @param timestamp When the release occurred
+     * @param pressDuration How long the button was held (milliseconds)
+     * @param bankId Bank information (0 = left bank, 1 = right bank)
+     * @return InputEvent configured for SHIFT button release
+     */
+    static InputEvent shiftButtonRelease(uint8_t buttonId, uint32_t timestamp, uint32_t pressDuration = 0, uint8_t bankId = 0) {
+        return InputEvent(Type::SHIFT_BUTTON_RELEASE, buttonId, timestamp, static_cast<int32_t>(pressDuration), static_cast<uint32_t>(bankId));
     }
     
     /**
@@ -242,6 +314,8 @@ struct InputEventFilter {
         switch (eventType) {
             case InputEvent::Type::BUTTON_PRESS:
             case InputEvent::Type::BUTTON_RELEASE:
+            case InputEvent::Type::SHIFT_BUTTON_PRESS:
+            case InputEvent::Type::SHIFT_BUTTON_RELEASE:
                 return enableButtons;
             case InputEvent::Type::ENCODER_TURN:
                 return enableEncoders;

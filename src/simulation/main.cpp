@@ -36,7 +36,8 @@
 // New Input Layer Abstraction includes
 #include "InputController.h"
 #include "CursesInputLayer.h"
-#include "GestureDetector.h"
+#include "ShiftBasedGestureDetector.h"
+#include "ShiftBasedGestureDetectorFactory.h"
 #include "InputStateEncoder.h"
 #include "InputStateProcessor.h"
 #include "InputSystemConfiguration.h"
@@ -194,7 +195,7 @@ private:
      * @brief Set up the complete Input Layer Abstraction architecture
      * 
      * Creates the proper pipeline: CursesInputLayer → InputStateEncoder → InputStateProcessor → InputController
-     * This uses the new bitwise state management system instead of the legacy GestureDetector.
+     * Now includes ShiftBasedGestureDetector for parameter lock functionality.
      */
     void setupInputController() {
         // Create configuration optimized for simulation
@@ -224,10 +225,14 @@ private:
             .debugOutput = debugOutput_.get()
         });
         
-        // Create InputController dependencies with modern state-based system
+        // **PHASE 3**: Create ShiftBasedGestureDetector for parameter lock functionality
+        auto shiftGestureDetector = ShiftBasedGestureDetectorFactory::createWithStateProcessor(
+            inputStateProcessor.get());
+        
+        // Create InputController dependencies with modern state-based system + SHIFT gestures
         InputController::Dependencies controllerDeps;
         controllerDeps.inputLayer = std::move(inputLayer);
-        controllerDeps.gestureDetector = nullptr; // Legacy system not used
+        controllerDeps.gestureDetector = std::move(shiftGestureDetector);  // SHIFT-based parameter locks
         controllerDeps.inputStateProcessor = std::move(inputStateProcessor);
         controllerDeps.clock = clock_.get();
         controllerDeps.debugOutput = debugOutput_.get();

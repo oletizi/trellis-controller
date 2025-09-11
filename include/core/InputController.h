@@ -242,6 +242,16 @@ private:
     uint16_t processStateBasedInput();
     
     /**
+     * @brief Process SHIFT-based gestures for parameter locks
+     * 
+     * Handles SHIFT + button combinations through ShiftBasedGestureDetector
+     * for parameter lock functionality. Works alongside state-based processing.
+     * 
+     * @return Number of control messages generated
+     */
+    uint16_t processShiftGestures();
+    
+    /**
      * @brief Legacy fallback: Process raw input events through gesture detection
      * 
      * Fallback processing path for backward compatibility.

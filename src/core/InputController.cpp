@@ -1,5 +1,6 @@
 #include "InputController.h"
 #include "CursesInputLayer.h"  // For dynamic_cast to set encoder
+#include "ShiftBasedGestureDetector.h"  // For SHIFT-based parameter locks
 #include <stdexcept>
 #include <algorithm>
 #include <string>
@@ -17,6 +18,13 @@ InputController::InputController(Dependencies deps, const InputSystemConfigurati
     // Log which system is being used
     if (dependencies_.inputStateProcessor) {
         debugLog("Using modern state-based InputStateProcessor system");
+        // Check if we also have ShiftBasedGestureDetector for parameter locks
+        if (dependencies_.gestureDetector) {
+            auto* shiftDetector = dynamic_cast<ShiftBasedGestureDetector*>(dependencies_.gestureDetector.get());
+            if (shiftDetector) {
+                debugLog("SHIFT-based parameter lock system integrated");
+            }
+        }
     } else if (dependencies_.gestureDetector) {
         debugLog("Using legacy event-based GestureDetector system");
     }
@@ -119,9 +127,13 @@ bool InputController::poll() {
         uint16_t messagesFromInput = 0;
         uint16_t messagesFromTiming = 0;
         
-        // Primary path: Use modern state-based processing
+        // Primary path: Use modern state-based processing with optional SHIFT gesture detection
         if (dependencies_.inputStateProcessor) {
             messagesFromInput = processStateBasedInput();
+            // Process SHIFT-based gestures if available (for parameter locks)
+            if (dependencies_.gestureDetector) {
+                messagesFromInput += processShiftGestures();
+            }
         } else {
             // Fallback: Use legacy event-based processing
             messagesFromInput = processInputEventsLegacy();
@@ -321,6 +333,54 @@ uint16_t InputController::processStateBasedInput() {
         
     } catch (const std::exception& e) {
         debugLog("State-based input processing error: " + std::string(e.what()));
+    }
+    
+    return messagesGenerated;
+}
+
+uint16_t InputController::processShiftGestures() {
+    if (!dependencies_.inputLayer || !dependencies_.gestureDetector) {
+        return 0;
+    }
+    
+    uint16_t messagesGenerated = 0;
+    InputEvent inputEvent;
+    std::vector<ControlMessage::Message> controlMessages;
+    
+    // Process SHIFT-specific events through the gesture detector
+    // This allows ShiftBasedGestureDetector to handle SHIFT + button combinations
+    // for parameter lock functionality while InputStateProcessor handles regular state
+    while (dependencies_.inputLayer->getNextEvent(inputEvent)) {
+        controlMessages.clear();
+        
+        // Only process SHIFT-related events through gesture detector
+        if (inputEvent.type == InputEvent::Type::SHIFT_BUTTON_PRESS || 
+            inputEvent.type == InputEvent::Type::SHIFT_BUTTON_RELEASE) {
+            dependencies_.gestureDetector->processInputEvent(inputEvent, controlMessages);
+            
+            // Queue resulting control messages
+            for (const auto& message : controlMessages) {
+                if (enqueueMessage(message)) {
+                    messagesGenerated++;
+                }
+            }
+        } else {
+            // For non-SHIFT events, check if we're in parameter lock mode
+            // and let the gesture detector handle them if so
+            if (dependencies_.gestureDetector->isInParameterLockMode() &&
+                (inputEvent.type == InputEvent::Type::BUTTON_PRESS ||
+                 inputEvent.type == InputEvent::Type::BUTTON_RELEASE)) {
+                dependencies_.gestureDetector->processInputEvent(inputEvent, controlMessages);
+                
+                // Queue resulting control messages
+                for (const auto& message : controlMessages) {
+                    if (enqueueMessage(message)) {
+                        messagesGenerated++;
+                    }
+                }
+            }
+            // Note: Regular button events are handled by InputStateProcessor in processStateBasedInput()
+        }
     }
     
     return messagesGenerated;

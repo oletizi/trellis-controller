@@ -273,35 +273,35 @@ TEST_CASE("ShiftBasedGestureDetector - Bank-aware control mapping", "[shift-gest
         REQUIRE(test.gestureDetector_->isInParameterLockMode());
         
         // Test right bank control buttons
-        // Right bank controls: b=note-(30), g=note+(6), n=velocity-(31), h=velocity+(7)
+        // Right bank controls: b=note-(28), g=note+(20), n=velocity-(29), h=velocity+(21)
         
-        // Test note- control (button 30 = 'b')
-        auto messages = test.processEvent(test.buttonPress(30));
+        // Test note- control (button 28 = 'b')
+        auto messages = test.processEvent(test.buttonPress(28));
         REQUIRE(messages.size() == 1);
         REQUIRE(messages[0].type == ControlMessage::Type::ADJUST_PARAMETER);
         REQUIRE(messages[0].param1 == 0); // NOTE_MINUS
         REQUIRE(static_cast<int8_t>(messages[0].param2) == -1); // delta = -1
         
-        // Test note+ control (button 6 = 'g')
-        messages = test.processEvent(test.buttonPress(6));
+        // Test note+ control (button 20 = 'g')
+        messages = test.processEvent(test.buttonPress(20));
         REQUIRE(messages.size() == 1);
         REQUIRE(messages[0].type == ControlMessage::Type::ADJUST_PARAMETER);
         REQUIRE(messages[0].param1 == 1); // NOTE_PLUS
         REQUIRE(static_cast<int8_t>(messages[0].param2) == 1); // delta = 1
         
-        // Test velocity- control (button 31 = 'n')
-        messages = test.processEvent(test.buttonPress(31));
+        // Test velocity- control (button 29 = 'n')
+        messages = test.processEvent(test.buttonPress(29));
         REQUIRE(messages.size() == 1);
         REQUIRE(messages[0].type == ControlMessage::Type::ADJUST_PARAMETER);
         REQUIRE(messages[0].param1 == 2); // VELOCITY_MINUS
-        REQUIRE(static_cast<int8_t>(messages[0].param2) == -1); // delta = -1
+        REQUIRE(static_cast<int8_t>(messages[0].param2) == -10); // delta = -10
         
-        // Test velocity+ control (button 7 = 'h')
-        messages = test.processEvent(test.buttonPress(7));
+        // Test velocity+ control (button 21 = 'h')
+        messages = test.processEvent(test.buttonPress(21));
         REQUIRE(messages.size() == 1);
         REQUIRE(messages[0].type == ControlMessage::Type::ADJUST_PARAMETER);
         REQUIRE(messages[0].param1 == 3); // VELOCITY_PLUS
-        REQUIRE(static_cast<int8_t>(messages[0].param2) == 1); // delta = 1
+        REQUIRE(static_cast<int8_t>(messages[0].param2) == 10); // delta = 10
     }
     
     SECTION("Right bank trigger → Left bank controls") {
@@ -310,35 +310,35 @@ TEST_CASE("ShiftBasedGestureDetector - Bank-aware control mapping", "[shift-gest
         REQUIRE(test.gestureDetector_->isInParameterLockMode());
         
         // Test left bank control buttons
-        // Left bank controls: z=note-(25), a=note+(0), x=velocity-(26), s=velocity+(1)
+        // Left bank controls: z=note-(24), a=note+(16), x=velocity-(25), s=velocity+(17)
         
-        // Test note- control (button 25 = 'z')
-        auto messages = test.processEvent(test.buttonPress(25));
+        // Test note- control (button 24 = 'z')
+        auto messages = test.processEvent(test.buttonPress(24));
         REQUIRE(messages.size() == 1);
         REQUIRE(messages[0].type == ControlMessage::Type::ADJUST_PARAMETER);
         REQUIRE(messages[0].param1 == 0); // NOTE_MINUS
         REQUIRE(static_cast<int8_t>(messages[0].param2) == -1); // delta = -1
         
-        // Test note+ control (button 0 = 'a')
-        messages = test.processEvent(test.buttonPress(0));
+        // Test note+ control (button 16 = 'a')
+        messages = test.processEvent(test.buttonPress(16));
         REQUIRE(messages.size() == 1);
         REQUIRE(messages[0].type == ControlMessage::Type::ADJUST_PARAMETER);
         REQUIRE(messages[0].param1 == 1); // NOTE_PLUS
         REQUIRE(static_cast<int8_t>(messages[0].param2) == 1); // delta = 1
         
-        // Test velocity- control (button 26 = 'x')
-        messages = test.processEvent(test.buttonPress(26));
+        // Test velocity- control (button 25 = 'x')
+        messages = test.processEvent(test.buttonPress(25));
         REQUIRE(messages.size() == 1);
         REQUIRE(messages[0].type == ControlMessage::Type::ADJUST_PARAMETER);
         REQUIRE(messages[0].param1 == 2); // VELOCITY_MINUS
-        REQUIRE(static_cast<int8_t>(messages[0].param2) == -1); // delta = -1
+        REQUIRE(static_cast<int8_t>(messages[0].param2) == -10); // delta = -10
         
-        // Test velocity+ control (button 1 = 's')
-        messages = test.processEvent(test.buttonPress(1));
+        // Test velocity+ control (button 17 = 's')
+        messages = test.processEvent(test.buttonPress(17));
         REQUIRE(messages.size() == 1);
         REQUIRE(messages[0].type == ControlMessage::Type::ADJUST_PARAMETER);
         REQUIRE(messages[0].param1 == 3); // VELOCITY_PLUS
-        REQUIRE(static_cast<int8_t>(messages[0].param2) == 1); // delta = 1
+        REQUIRE(static_cast<int8_t>(messages[0].param2) == 10); // delta = 10
     }
 }
 

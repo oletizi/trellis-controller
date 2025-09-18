@@ -127,16 +127,16 @@ private:
      */
     struct BankMapping {
         // Left bank control buttons (simulation keyboard mapping)
-        static constexpr uint8_t LEFT_NOTE_MINUS = 25;   // 'z' key
-        static constexpr uint8_t LEFT_NOTE_PLUS = 0;     // 'a' key  
-        static constexpr uint8_t LEFT_VEL_MINUS = 26;    // 'x' key
-        static constexpr uint8_t LEFT_VEL_PLUS = 1;      // 's' key
+        static constexpr uint8_t LEFT_NOTE_MINUS = 24;   // 'z' key (button 24)
+        static constexpr uint8_t LEFT_NOTE_PLUS = 16;    // 'a' key (button 16)
+        static constexpr uint8_t LEFT_VEL_MINUS = 25;    // 'x' key (button 25)
+        static constexpr uint8_t LEFT_VEL_PLUS = 17;     // 's' key (button 17)
         
         // Right bank control buttons (simulation keyboard mapping)
-        static constexpr uint8_t RIGHT_NOTE_MINUS = 30;  // 'b' key
-        static constexpr uint8_t RIGHT_NOTE_PLUS = 6;    // 'g' key
-        static constexpr uint8_t RIGHT_VEL_MINUS = 31;   // 'n' key
-        static constexpr uint8_t RIGHT_VEL_PLUS = 7;     // 'h' key
+        static constexpr uint8_t RIGHT_NOTE_MINUS = 28;  // 'b' key (button 28)
+        static constexpr uint8_t RIGHT_NOTE_PLUS = 20;   // 'g' key (button 20)
+        static constexpr uint8_t RIGHT_VEL_MINUS = 29;   // 'n' key (button 29)
+        static constexpr uint8_t RIGHT_VEL_PLUS = 21;    // 'h' key (button 21)
         
         /**
          * @brief Check if button is in left bank (triggers right bank controls)

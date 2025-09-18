@@ -1,5 +1,6 @@
 #include "ShiftBasedGestureDetector.h"
 #include <cstring>
+#include <algorithm>
 
 /**
  * @file ShiftBasedGestureDetector.cpp
@@ -20,6 +21,8 @@ ShiftBasedGestureDetector::ShiftBasedGestureDetector(InputStateProcessor* stateP
 {
     // Initialize with default configuration
     config_ = InputSystemConfiguration::forNeoTrellis();
+    
+    // No timing tracking needed for SHIFT-based detection
 }
 
 uint8_t ShiftBasedGestureDetector::processInputEvent(const InputEvent& inputEvent, 
@@ -50,12 +53,13 @@ uint8_t ShiftBasedGestureDetector::processInputEvent(const InputEvent& inputEven
                 } else {
                     messagesGenerated += processStepToggle(inputEvent, controlMessages);
                 }
+                // SHIFT-based detection doesn't need timing tracking
             }
             break;
             
         case InputEvent::Type::BUTTON_RELEASE:
         case InputEvent::Type::SHIFT_BUTTON_RELEASE:
-            // Button releases don't trigger additional actions in SHIFT-based system
+            // No special handling needed for releases in SHIFT-based detection
             break;
             
         default:
@@ -84,6 +88,8 @@ void ShiftBasedGestureDetector::reset() {
     // Clear button states
     buttonStates_ = 0;
     currentState_ = InputState(0, false, 0, 0);
+    
+    // No timing tracking to clear for SHIFT-based detection
     
     // Reset state processor if available
     if (stateProcessor_) {
@@ -303,21 +309,21 @@ bool ShiftBasedGestureDetector::BankMapping::getParameterAdjustment(uint8_t butt
     if (activeBankId == BankId::LEFT_BANK) {
         // Left bank controls: z=note-, a=note+, x=velocity-, s=velocity+
         switch (buttonId) {
-            case LEFT_NOTE_MINUS:   // 'z' key (button 25)
+            case LEFT_NOTE_MINUS:   // 'z' key (button 24)
                 paramType = ParameterType::NOTE_MINUS;
                 delta = -1;
                 return true;
-            case LEFT_NOTE_PLUS:    // 'a' key (button 0) 
+            case LEFT_NOTE_PLUS:    // 'a' key (button 16) 
                 paramType = ParameterType::NOTE_PLUS;
                 delta = 1;
                 return true;
-            case LEFT_VEL_MINUS:    // 'x' key (button 26)
+            case LEFT_VEL_MINUS:    // 'x' key (button 25)
                 paramType = ParameterType::VELOCITY_MINUS;
-                delta = -1;
+                delta = -10;
                 return true;
-            case LEFT_VEL_PLUS:     // 's' key (button 1)
+            case LEFT_VEL_PLUS:     // 's' key (button 17)
                 paramType = ParameterType::VELOCITY_PLUS;
-                delta = 1;
+                delta = 10;
                 return true;
             default:
                 return false;
@@ -325,21 +331,21 @@ bool ShiftBasedGestureDetector::BankMapping::getParameterAdjustment(uint8_t butt
     } else {
         // Right bank controls: b=note-, g=note+, n=velocity-, h=velocity+
         switch (buttonId) {
-            case RIGHT_NOTE_MINUS:  // 'b' key (button 30)
+            case RIGHT_NOTE_MINUS:  // 'b' key (button 28)
                 paramType = ParameterType::NOTE_MINUS;
                 delta = -1;
                 return true;
-            case RIGHT_NOTE_PLUS:   // 'g' key (button 6)
+            case RIGHT_NOTE_PLUS:   // 'g' key (button 20)
                 paramType = ParameterType::NOTE_PLUS;
                 delta = 1;
                 return true;
-            case RIGHT_VEL_MINUS:   // 'n' key (button 31)
+            case RIGHT_VEL_MINUS:   // 'n' key (button 29)
                 paramType = ParameterType::VELOCITY_MINUS;
-                delta = -1;
+                delta = -10;
                 return true;
-            case RIGHT_VEL_PLUS:    // 'h' key (button 7)
+            case RIGHT_VEL_PLUS:    // 'h' key (button 21)
                 paramType = ParameterType::VELOCITY_PLUS;
-                delta = 1;
+                delta = 10;
                 return true;
             default:
                 return false;

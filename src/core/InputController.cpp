@@ -23,10 +23,17 @@ InputController::InputController(Dependencies deps, const InputSystemConfigurati
             auto* shiftDetector = dynamic_cast<ShiftBasedGestureDetector*>(dependencies_.gestureDetector.get());
             if (shiftDetector) {
                 debugLog("SHIFT-based parameter lock system integrated");
+            } else {
+                debugLog("Legacy timing-based gesture detector present (for backward compatibility)");
             }
         }
     } else if (dependencies_.gestureDetector) {
-        debugLog("Using legacy event-based GestureDetector system");
+        auto* shiftDetector = dynamic_cast<ShiftBasedGestureDetector*>(dependencies_.gestureDetector.get());
+        if (shiftDetector) {
+            debugLog("Using SHIFT-based gesture detector system");
+        } else {
+            debugLog("Using legacy event-based GestureDetector system");
+        }
     }
     
     status_.reset();
